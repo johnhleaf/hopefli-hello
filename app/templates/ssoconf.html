@@ -1,0 +1,36 @@
+{% extends "base.html" %}{% block title %}Anslut Hopefli SSO · Hello{% endblock %}{% block content %}
+<section class="setup-wrap">
+  <div class="setup-copy">
+    <p class="eyebrow">HELLO · FÖRSTA KONFIGURATION</p>
+    <h1>Anslut Hopefli SSO.</h1>
+    <p>Den här sidan finns bara tills kopplingen är verifierad. Client Secret sparas först efter en lyckad CMS-inloggning med ett konto som har Admin-åtkomst till Hopefli Hello.</p>
+  </div>
+  <div class="setup-card">
+    <span class="mini-logo">H</span>
+    <h2>SSO-konfiguration</h2>
+    <div class="setup-values">
+      <div><small>Issuer</small><strong>{{ fixed.issuer }}</strong></div>
+      <div><small>Client ID</small><strong>{{ fixed.client_id }}</strong></div>
+      <div><small>Redirect URI</small><code>{{ fixed.redirect_uri }}</code></div>
+      <div><small>Version</small><strong>{{ app_version }}</strong></div>
+    </div>
+    <div class="setup-note">
+      <strong>Redirect URI i CMS</strong>
+      <p>Klienten ska endast ha <code>{{ fixed.redirect_uri }}</code> registrerad. Setup och vanlig inloggning använder samma callback.</p>
+    </div>
+
+    <div class="setup-note">
+      <strong>Värden i Hopefli CMS</strong>
+      <p>Namn: <code>Hopefli Hello</code><br>Client ID: <code>hopefli-hello</code><br>System: <code>Hello</code><br>Redirect URI: <code>{{ fixed.redirect_uri }}</code></p>
+    </div>
+    <form method="post" class="form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Client Secret
+        <input name="client_secret" type="password" autocomplete="new-password" required placeholder="Klistra in secret från Hopefli CMS">
+      </label>
+      <button class="primary" type="submit">Verifiera via Hopefli CMS <span>→</span></button>
+    </form>
+    <small class="muted">Secret visas aldrig igen och skrivs inte till browserloggar.</small>
+  </div>
+</section>
+{% endblock %}

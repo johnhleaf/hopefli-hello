@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}Logga in · Hopefli Hello{% endblock %}{% block content %}
+<section class="login-wrap">
+  <div class="login-copy"><p class="eyebrow">VÄLKOMMEN HEM</p><h1>En plats för<br>allt Hopefli.</h1><p>System, människor, event och det som är på gång – samlat på ett ställe.</p></div>
+  <div class="login-card"><span class="mini-logo">H</span><h2>Logga in</h2><p>Använd ditt vanliga Hopefli-konto.</p><a class="primary {% if not sso_ready %}disabled{% endif %}" href="{{ url_for('auth_login') }}">Logga in med Hopefli <span>→</span></a>{% if not sso_ready %}<small>SSO behöver konfigureras av administratör.</small><a class="setup-link" href="{{ url_for('ssoconf') }}">Konfigurera Hopefli SSO →</a>{% endif %}</div>
+</section>
+{% endblock %}

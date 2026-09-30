@@ -1,0 +1,47 @@
+services:
+  app:
+    build: ./current
+    restart: unless-stopped
+    env_file:
+      - ./shared/.env
+    volumes:
+      - ./shared/hello-config:/config
+      - ./shared/update-inbox:/updates
+    ports:
+      - "${APP_PORT:-8097}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - intranet
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hopefli_intranet
+      POSTGRES_USER: hopefli
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./shared/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hopefli -d hopefli_intranet"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - intranet
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./shared/redis:/data
+    networks:
+      - intranet
+
+networks:
+  intranet:

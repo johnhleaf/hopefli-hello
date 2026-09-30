@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% block content %}
+<section class="hero"><div><p class="eyebrow">{{ now.strftime('%A %d %B') }}</p><h1>{{ greeting }}, {{ me.name.split(' ')[0] }}.</h1><p class="quote">“{{ quote }}”</p></div><div class="hero-orb">H</div></section>
+<section class="system-grid">
+  <a class="system-card cms" href="{{ config.get('CMS_URL','https://cms.hopefli.se') }}"><div><span>01</span><h2>CMS</h2><p>Kunder, offerter, ekonomi och försäljning.</p></div><b>Öppna →</b></a>
+  <a class="system-card event" href="{{ config.get('EVENT_URL','https://cms.hopefli.se/events') }}"><div><span>02</span><h2>Event</h2><p>Planering, deltagare och kommande upplevelser.</p></div><b>Öppna →</b></a>
+  <a class="system-card docs" href="{{ config.get('BOOKSTACK_URL','https://docs.hopefli.se') }}"><div><span>03</span><h2>BookStack</h2><p>Rutiner, dokumentation och manualer.</p></div><b>Öppna →</b></a>
+</section>
+<section class="two-col"><div class="panel"><div class="panel-head"><div><p class="eyebrow">PÅ GÅNG</p><h2>Kommande event</h2></div><a href="{{ config.get('EVENT_URL','https://cms.hopefli.se/events') }}">Visa alla →</a></div><div class="empty-event"><strong>Eventkopplingen är förberedd.</strong><p>Nästa steg är att ansluta CMS/Event-API:t så visas kommande event här automatiskt.</p></div></div>
+<div class="panel"><div class="panel-head"><div><p class="eyebrow">INTERNT</p><h2>Senaste nytt</h2></div><a href="{{ url_for('news') }}">Alla nyheter →</a></div>{% if news %}{% for item in news %}<article class="news-row"><span>{{ item.published_at.strftime('%d %b') }}</span><div><h3>{{ item.title }}</h3><p>{{ item.body[:120] }}{% if item.body|length > 120 %}…{% endif %}</p></div></article>{% endfor %}{% else %}<p class="muted">Inga nyheter publicerade ännu.</p>{% endif %}</div></section>
+<section class="quick"><a href="{{ url_for('people') }}"><span>PERSONAL</span><strong>Hitta kollegor och kontaktuppgifter →</strong></a><a href="{{ config.get('BOOKSTACK_URL','https://docs.hopefli.se') }}"><span>PERSONALHANDBOK</span><strong>Rutiner, ledighet och information →</strong></a><a href="{{ config.get('PLAY_URL','https://play.hopefli.se') }}"><span>HOPEFLI PLAY</span><strong>Öppna Play →</strong></a></section>
+{% endblock %}

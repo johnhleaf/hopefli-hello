@@ -1,0 +1,9 @@
+[Unit]
+Description=Hopefli Hello update/GitHub worker
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=APP_DIR=/opt/hopefli-intranet
+ExecStart=/usr/local/sbin/hopefli-hello-worker

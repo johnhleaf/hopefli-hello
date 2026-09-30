@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}System · Hopefli Hello{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="eyebrow">ADMINISTRATION · SYSTEM</p>
+  <h1>Uppdateringar & GitHub</h1>
+  <p>Hantera releaser och versionssynk utan CLI. Alla åtgärder kräver Hello-admin och körs via en separat host-worker.</p>
+</section>
+
+<section class="admin-grid">
+  <div class="panel">
+    <div class="panel-head"><div><p class="eyebrow">UPPDATERING</p><h2>Ladda upp release</h2></div><span class="status-pill">v{{ app_version }}</span></div>
+    <p class="muted">Ladda upp ett releasepaket i formatet <code>hopefli-hello-vX.Y.Z.tar.gz</code>. Paketet valideras innan det läggs i installationskön.</p>
+    <form method="post" action="{{ url_for('admin_upload_update') }}" enctype="multipart/form-data" class="form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Releasepaket<input type="file" name="release" accept=".gz,.tar.gz,application/gzip" required></label>
+      <button class="primary" type="submit">Ladda upp och installera <span>→</span></button>
+    </form>
+    <div class="worker-status {{ worker.get('state','idle') }}">
+      <strong>Workerstatus</strong>
+      <span>{{ worker.get('message','Ingen uppdatering har körts ännu.') }}</span>
+      {% if worker.get('version') %}<small>Version {{ worker.get('version') }}</small>{% endif %}
+      {% if worker.get('updated_at') %}<small>{{ worker.get('updated_at') }}</small>{% endif %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <p class="eyebrow">GITHUB</p>
+    <h2>Koppla repository</h2>
+    <p class="muted">Token lagras endast server-side och visas inte igen efter att den sparats.</p>
+    <form method="post" action="{{ url_for('admin_github_save') }}" class="form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Repository <input name="repo" value="{{ github.repo }}" placeholder="Hopefli/hopefli-hello" required></label>
+      <label>Branch <input name="branch" value="{{ github.branch }}" placeholder="main" required></label>
+      <label>Fine-grained token <input type="password" name="token" autocomplete="new-password" placeholder="{{ github.token_hint }}"></label>
+      <small class="muted">Lämna tokenfältet tomt för att behålla redan sparad token.</small>
+      <button class="primary" type="submit">Spara GitHub-konfiguration <span>→</span></button>
+    </form>
+    <div class="action-row">
+      <form method="post" action="{{ url_for('admin_github_test') }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary" type="submit">Testa anslutning</button></form>
+      <form method="post" action="{{ url_for('admin_github_sync') }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary" type="submit">Synka aktuell version</button></form>
+    </div>
+  </div>
+</section>
+
+<section class="panel token-help">
+  <p class="eyebrow">REKOMMENDERADE GITHUB-RÄTTIGHETER</p>
+  <h2>Fine-grained PAT</h2>
+  <div class="token-grid">
+    <div><strong>Repository access</strong><p>Välj endast det repository som ska användas för Hopefli Hello.</p></div>
+    <div><strong>Contents</strong><p>Read and write.</p></div>
+    <div><strong>Workflows</strong><p>Read and write om Hello ska kunna synka filer under <code>.github/workflows/</code>.</p></div>
+    <div><strong>Övrigt</strong><p>Ge inte fler rättigheter än dessa om de inte behövs senare.</p></div>
+  </div>
+</section>
+{% endblock %}

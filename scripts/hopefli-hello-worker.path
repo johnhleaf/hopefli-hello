@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch Hopefli Hello admin job queue
+
+[Path]
+PathChanged=/opt/hopefli-intranet/shared/update-inbox/queue.trigger
+Unit=hopefli-hello-worker.service
+
+[Install]
+WantedBy=multi-user.target
