@@ -3,22 +3,28 @@ import hashlib
 import json
 import logging
 import os
+import re
 import secrets
 import tarfile
 import uuid
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+from io import BytesIO
 from pathlib import Path
 
 import requests
 from authlib.jose import JsonWebKey, jwt
-from flask import Flask, abort, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_file, session, url_for
 from flask_session import Session
 from redis import Redis
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, create_engine, desc
 from sqlalchemy.orm import declarative_base, scoped_session, sessionmaker
 from werkzeug.security import check_password_hash
 from werkzeug.utils import secure_filename
+from itsdangerous import BadSignature, URLSafeSerializer
+
+from .staff import StaffAuthExpired, StaffService, StaffUnavailable, employment_anniversaries, upcoming_birthdays
+from .jobs import JobsAuthExpired, JobsService, JobsUnavailable
 
 Base = declarative_base()
 logger = logging.getLogger("hopefli-hello")
@@ -46,11 +52,35 @@ class NewsItem(Base):
     published_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
 
+class HandbookCategory(Base):
+    __tablename__ = "handbook_categories"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(120), nullable=False)
+    sort_order = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class HandbookArticle(Base):
+    __tablename__ = "handbook_articles"
+    id = Column(Integer, primary_key=True)
+    category_id = Column(Integer, nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    body = Column(Text, nullable=False)
+    published = Column(Boolean, nullable=False, default=True)
+    sort_order = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
 def _b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
 
 SSO_CONFIG_PATH = Path(os.environ.get("SSO_CONFIG_PATH", "/config/sso.json"))
+BRANDING_DIR = Path(os.environ.get("BRANDING_DIR", "/config/branding"))
+
+
+HANDBOOK_STANDARD_PATH = Path(__file__).resolve().parent / "data" / "hopefli-handbook-standard.json"
+
 
 
 class SSOAuthorizationError(Exception):
@@ -113,6 +143,18 @@ def create_app():
     app.extensions["db_session"] = DB
     app.teardown_appcontext(lambda exc=None: DB.remove())
 
+    # Give a fresh installation a useful handbook structure without creating
+    # placeholder policy text that could be mistaken for approved company policy.
+    if DB.query(HandbookCategory).count() == 0:
+        for idx, name in enumerate([
+            "Anställning & vardag",
+            "Ledighet & frånvaro",
+            "Utlägg & resor",
+            "IT & säkerhet",
+        ], start=1):
+            DB.add(HandbookCategory(name=name, sort_order=idx * 10))
+        DB.commit()
+
     @app.after_request
     def security_headers(resp):
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -163,11 +205,148 @@ def create_app():
             "redirect_uri": f"{base}/auth/callback",
         }
 
+    STAFF_CONFIG_PATH = SSO_CONFIG_PATH.parent / "staff.json"
+    staff_photo_signer = URLSafeSerializer(app.config["SECRET_KEY"], salt="hopefli-hello-staff-photo")
+
+    def _staff_config_defaults():
+        return {
+            "base_url": os.environ.get("CMS_STAFF_BASE_URL", "https://cms.hopefli.se"),
+            "staff_path": os.environ.get("CMS_STAFF_API_PATH", "/api/internal/v1/staff"),
+            "away_path": os.environ.get("CMS_STAFF_AWAY_API_PATH", "/api/internal/v1/staff/away-today"),
+            "photo_path_template": os.environ.get("CMS_STAFF_PHOTO_PATH_TEMPLATE", "/api/internal/v1/staff/{id}/photo"),
+        }
+
+    def _read_staff_config():
+        cfg = _staff_config_defaults()
+        try:
+            if STAFF_CONFIG_PATH.exists():
+                saved = json.loads(STAFF_CONFIG_PATH.read_text())
+                if isinstance(saved, dict):
+                    for key in cfg:
+                        if saved.get(key) not in (None, ""):
+                            cfg[key] = saved[key]
+        except Exception:
+            logger.exception("Could not read staff API config")
+        return cfg
+
+    def _write_staff_config(data):
+        STAFF_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = STAFF_CONFIG_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        os.chmod(tmp, 0o600)
+        tmp.replace(STAFF_CONFIG_PATH)
+
+    def _staff_service():
+        cfg = _read_staff_config()
+        return StaffService(
+            cfg["base_url"], app.config["SESSION_REDIS"], cfg["staff_path"], cfg["away_path"], cfg["photo_path_template"],
+            cache_ttl=int(os.environ.get("CMS_STAFF_CACHE_SECONDS", "180")),
+            stale_ttl=int(os.environ.get("CMS_STAFF_STALE_SECONDS", "86400")),
+            timeout=int(os.environ.get("CMS_STAFF_TIMEOUT_SECONDS", "5")),
+        )
+
+    def _cms_access_token():
+        token = session.get("cms_access_token")
+        expires_at = session.get("cms_access_token_expires_at")
+        try:
+            if expires_at and datetime.now(timezone.utc).timestamp() >= float(expires_at) - 20:
+                return None
+        except Exception:
+            pass
+        return token
+
+    def _with_photo_tokens(people):
+        for person in people:
+            if person.get("cms_id") and person.get("photo_available"):
+                person["photo_token"] = staff_photo_signer.dumps({"id": person["cms_id"]})
+            else:
+                person["photo_token"] = None
+        return people
+
+    def _jobs_service():
+        return JobsService(
+            os.environ.get("CMS_JOBS_BASE_URL", "https://cms.hopefli.se"),
+            app.config["SESSION_REDIS"],
+            pipeline_path=os.environ.get("CMS_JOBS_PIPELINE_PATH", "/api/internal/v1/jobs/pipeline"),
+            cache_ttl=int(os.environ.get("CMS_JOBS_CACHE_SECONDS", "180")),
+            stale_ttl=int(os.environ.get("CMS_JOBS_STALE_SECONDS", "86400")),
+            timeout=int(os.environ.get("CMS_JOBS_TIMEOUT_SECONDS", "5")),
+        )
+
+    def _jobs_dashboard_data():
+        token = _cms_access_token()
+        if not token:
+            return {"items": [], "needs_reauth": True, "stale": False}
+        try:
+            items, meta = _jobs_service().pipeline(token)
+            return {
+                "items": items[:5],
+                "needs_reauth": bool(meta.get("auth_expired")),
+                "stale": bool(meta.get("stale")),
+            }
+        except JobsAuthExpired:
+            return {"items": [], "needs_reauth": True, "stale": False}
+        except JobsUnavailable:
+            return {"items": [], "needs_reauth": False, "stale": False, "unavailable": True}
+        except Exception:
+            logger.exception("Dashboard jobs widget failed")
+            return {"items": [], "needs_reauth": False, "stale": False, "unavailable": True}
+
+    def _staff_dashboard_data():
+        token = _cms_access_token()
+        if not token:
+            return {"people": [], "away": [], "birthdays": [], "anniversaries": [], "needs_reauth": True, "stale": False}
+        try:
+            people, pmeta = _staff_service().list_staff(token)
+            try:
+                away, ameta = _staff_service().away_today(token)
+            except Exception:
+                away, ameta = [], {"stale": False}
+            by_id = {str(p.get("cms_id")): p for p in people if p.get("cms_id")}
+            by_email = {(p.get("email") or "").lower(): p for p in people if p.get("email")}
+            for item in away:
+                match = by_id.get(str(item.get("cms_id"))) if item.get("cms_id") else None
+                if not match and item.get("email"):
+                    match = by_email.get(item.get("email").lower())
+                if match and not item.get("name"):
+                    item["name"] = match.get("name")
+            return {
+                "people": people,
+                "away": away[:6],
+                "birthdays": upcoming_birthdays(people),
+                "anniversaries": employment_anniversaries(people),
+                "needs_reauth": bool(pmeta.get("auth_expired")),
+                "stale": bool(pmeta.get("stale") or ameta.get("stale")),
+            }
+        except StaffAuthExpired:
+            return {"people": [], "away": [], "birthdays": [], "anniversaries": [], "needs_reauth": True, "stale": False}
+        except StaffUnavailable:
+            return {"people": [], "away": [], "birthdays": [], "anniversaries": [], "needs_reauth": False, "stale": False, "unavailable": True}
+        except Exception:
+            logger.exception("Dashboard staff widget failed")
+            return {"people": [], "away": [], "birthdays": [], "anniversaries": [], "needs_reauth": False, "stale": False, "unavailable": True}
+
     @app.context_processor
     def globals_():
         version_path = Path("/app/VERSION")
         version = version_path.read_text().strip() if version_path.exists() else "dev"
-        return {"me": current_user(), "app_version": version}
+        logo_exists = (BRANDING_DIR / "logo").exists()
+        favicon_exists = (BRANDING_DIR / "favicon").exists()
+        return {"me": current_user(), "app_version": version, "logo_exists": logo_exists, "favicon_exists": favicon_exists}
+
+    @app.get("/branding/<kind>")
+    def branding_asset(kind):
+        if kind not in {"logo", "favicon"}: abort(404)
+        p = BRANDING_DIR / kind
+        if not p.exists(): abort(404)
+        meta_path = BRANDING_DIR / "branding.json"
+        mimetype = None
+        try:
+            meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+            mimetype = (meta.get(kind) or {}).get("mimetype")
+        except Exception:
+            pass
+        return send_file(p, mimetype=mimetype or "application/octet-stream", conditional=True, max_age=3600)
 
     @app.get("/health")
     def health():
@@ -187,7 +366,17 @@ def create_app():
         ]
         quote = quotes[now.toordinal() % len(quotes)]
         news = DB.query(NewsItem).order_by(desc(NewsItem.important), desc(NewsItem.published_at)).limit(3).all()
-        return render_template("home.html", greeting=greeting, quote=quote, now=now, news=news)
+        staff = {"people": [], "away": [], "birthdays": [], "anniversaries": [], "needs_reauth": False, "stale": False, "unavailable": True}
+        jobs = {"items": [], "needs_reauth": False, "stale": False, "unavailable": True}
+        try:
+            staff = _staff_dashboard_data()
+        except Exception:
+            logger.exception("Home staff data preparation failed")
+        try:
+            jobs = _jobs_dashboard_data()
+        except Exception:
+            logger.exception("Home jobs data preparation failed")
+        return render_template("home.html", greeting=greeting, quote=quote, now=now, news=news, staff=staff, jobs=jobs)
 
     @app.get("/login")
     def login():
@@ -407,9 +596,12 @@ def create_app():
         nonce = secrets.token_urlsafe(32)
         verifier = secrets.token_urlsafe(64)
         challenge = _b64url(hashlib.sha256(verifier.encode()).digest())
+        next_url = request.args.get("next", "")
+        if not next_url.startswith("/") or next_url.startswith("//"):
+            next_url = ""
         session.clear()
         session.permanent = True
-        session["oidc"] = {"state": state, "nonce": nonce, "verifier": verifier, "created": datetime.now(timezone.utc).timestamp()}
+        session["oidc"] = {"state": state, "nonce": nonce, "verifier": verifier, "created": datetime.now(timezone.utc).timestamp(), "next": next_url}
 
         params = {
             "response_type": "code",
@@ -528,11 +720,19 @@ def create_app():
             user.last_login_at = datetime.now(timezone.utc)
             DB.commit()
 
+            next_url = oidc_state.get("next") or ""
             session.clear()  # regenerate server-side session identity after authentication
             session.permanent = True
             session["user"] = {"sub": sub, "name": user.name, "email": user.email, "role": role, "groups": groups}
+            # Flask-Session stores this server-side in Redis; it is never exposed to browser JavaScript.
+            if access_token:
+                session["cms_access_token"] = access_token
+                try:
+                    session["cms_access_token_expires_at"] = datetime.now(timezone.utc).timestamp() + int(token_data.get("expires_in") or 3600)
+                except Exception:
+                    session["cms_access_token_expires_at"] = datetime.now(timezone.utc).timestamp() + 3600
             logger.info("SSO login success sub=%s role=%s", sub, role)
-            return redirect(url_for("home"))
+            return redirect(next_url or url_for("home"))
         except SSOAuthorizationError as exc:
             logger.warning("OIDC login denied type=%s", str(exc))
             session.clear()
@@ -567,11 +767,113 @@ def create_app():
             flash("Felaktiga återställningsuppgifter.", "error")
         return render_template("recovery.html")
 
-    @app.get("/people")
+    @app.get("/uppdrag")
+    @login_required
+    def jobs():
+        status_filter = request.args.get("status", "all").strip().lower()
+        if status_filter not in {"all", "confirmed", "ongoing"}:
+            status_filter = "all"
+        token = _cms_access_token()
+        rows = []
+        meta = {"stale": False}
+        error = None
+        needs_reauth = False
+        if not token:
+            needs_reauth = True
+        else:
+            try:
+                rows, meta = _jobs_service().pipeline(token)
+                if meta.get("auth_expired"):
+                    needs_reauth = True
+            except JobsAuthExpired:
+                needs_reauth = True
+            except JobsUnavailable:
+                error = "CMS uppdragspipeline kan inte nås just nu."
+            except Exception:
+                logger.exception("Jobs pipeline failed")
+                error = "Uppdragen kunde inte läsas just nu."
+        if status_filter != "all":
+            rows = [item for item in rows if item.get("status") == status_filter]
+        return render_template("jobs.html", jobs=rows, status_filter=status_filter, jobs_meta=meta, jobs_error=error, needs_reauth=needs_reauth)
+
+    @app.get("/personal")
     @login_required
     def people():
-        users = DB.query(ShadowUser).filter_by(active=True).order_by(ShadowUser.name.asc()).all()
-        return render_template("people.html", users=users)
+        query = request.args.get("q", "").strip()
+        token = _cms_access_token()
+        people_rows = []
+        meta = {"stale": False}
+        error = None
+        needs_reauth = False
+        if not token:
+            needs_reauth = True
+        else:
+            try:
+                people_rows, meta = _staff_service().list_staff(token)
+                people_rows = _with_photo_tokens(people_rows)
+                if meta.get("auth_expired"):
+                    needs_reauth = True
+            except StaffAuthExpired:
+                needs_reauth = True
+            except StaffUnavailable:
+                error = "CMS personalkatalog kan inte nås just nu."
+            except Exception:
+                logger.exception("Staff directory failed")
+                error = "Personalkatalogen kunde inte läsas just nu."
+        if query:
+            needle = query.casefold()
+            people_rows = [p for p in people_rows if needle in " ".join(str(p.get(k) or "") for k in ("name", "email", "phone", "role")).casefold()]
+        return render_template("people.html", users=people_rows, query=query, staff_meta=meta, staff_error=error, needs_reauth=needs_reauth)
+
+    @app.get("/people")
+    @login_required
+    def people_legacy():
+        return redirect(url_for("people"), code=301)
+
+    @app.get("/personal/photo/<token>")
+    @login_required
+    def staff_photo(token):
+        try:
+            payload = staff_photo_signer.loads(token)
+            cms_id = payload.get("id") if isinstance(payload, dict) else None
+        except BadSignature:
+            abort(404)
+        if not cms_id:
+            abort(404)
+        access_token = _cms_access_token()
+        if not access_token:
+            abort(401)
+        try:
+            content, mimetype = _staff_service().photo(access_token, cms_id)
+            if not content:
+                abort(404)
+            return send_file(BytesIO(content), mimetype=mimetype, max_age=3600)
+        except StaffAuthExpired:
+            abort(401)
+        except Exception:
+            logger.warning("Staff photo proxy failed", exc_info=True)
+            abort(404)
+
+    @app.get("/handbook")
+    @login_required
+    def handbook():
+        categories = DB.query(HandbookCategory).order_by(HandbookCategory.sort_order.asc(), HandbookCategory.name.asc()).all()
+        rows = []
+        for cat in categories:
+            articles = DB.query(HandbookArticle).filter_by(category_id=cat.id, published=True).order_by(HandbookArticle.sort_order.asc(), HandbookArticle.title.asc()).all()
+            if articles:
+                rows.append((cat, articles))
+        uncategorized = DB.query(HandbookArticle).filter_by(category_id=0, published=True).order_by(HandbookArticle.sort_order.asc(), HandbookArticle.title.asc()).all()
+        return render_template("handbook.html", categories=rows, uncategorized=uncategorized)
+
+    @app.get("/handbook/<int:article_id>")
+    @login_required
+    def handbook_article(article_id):
+        article = DB.get(HandbookArticle, article_id)
+        if not article or (not article.published and current_user().get("role") != "admin"):
+            abort(404)
+        category = DB.get(HandbookCategory, article.category_id) if article.category_id else None
+        return render_template("handbook_article.html", article=article, category=category)
 
     @app.get("/news")
     @login_required
@@ -644,6 +946,41 @@ def create_app():
         except Exception:
             return {"state": "error", "message": "Workerstatus kunde inte läsas."}
 
+    def _safe_worker_log_name(name):
+        name = (name or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+\.log", name):
+            return None
+        return name
+
+    def _read_worker_log(name, max_bytes=256000):
+        safe = _safe_worker_log_name(name)
+        if not safe:
+            return ""
+        inbox = Path(os.environ.get("UPDATE_INBOX_PATH", "/updates"))
+        for p in (inbox / "logs" / safe, inbox / safe):
+            try:
+                if p.is_file():
+                    data = p.read_bytes()
+                    if len(data) > max_bytes:
+                        data = data[-max_bytes:]
+                        return "… tidigare loggrad(er) avkortade …\n" + data.decode("utf-8", "replace")
+                    return data.decode("utf-8", "replace")
+            except Exception:
+                logger.exception("Could not read worker log %s", safe)
+        return ""
+
+    def _worker_log_history(limit=12):
+        inbox = Path(os.environ.get("UPDATE_INBOX_PATH", "/updates"))
+        rows = []
+        try:
+            logdir = inbox / "logs"
+            if logdir.is_dir():
+                for p in sorted(logdir.glob("*.log"), key=lambda x: x.stat().st_mtime, reverse=True)[:limit]:
+                    rows.append({"name": p.name, "size": p.stat().st_size, "mtime": datetime.fromtimestamp(p.stat().st_mtime, timezone.utc).isoformat()})
+        except Exception:
+            logger.exception("Could not list worker logs")
+        return rows
+
     def _safe_release_archive(path: Path):
         with tarfile.open(path, "r:gz") as tf:
             names = tf.getnames()
@@ -673,6 +1010,13 @@ def create_app():
         session["admin_system_csrf"] = csrf
         cfg = _read_github_config()
         status = _read_worker_status()
+        log_name = status.get("log_file") or (
+            "last-update.log" if status.get("kind") == "update" else
+            "last-github.log" if status.get("kind") == "github" else
+            "last-app.log" if status.get("kind") == "applog" else
+            ""
+        )
+        worker_log = _read_worker_log(log_name) if log_name else ""
         return render_template(
             "admin_system.html",
             csrf=csrf,
@@ -682,8 +1026,66 @@ def create_app():
                 "configured": bool(cfg.get("token")),
                 "token_hint": ("••••" + cfg.get("token", "")[-4:]) if cfg.get("token") else "Ej sparad",
             },
-            worker=status,
+            staff_api=_read_staff_config(),
+            staff_diag=session.pop("staff_diag", None),
+            worker=status, worker_log=worker_log, worker_log_name=log_name, worker_log_history=_worker_log_history(),
         )
+
+    @app.get("/admin/system/log/<name>")
+    @admin_required
+    def admin_system_log(name):
+        safe = _safe_worker_log_name(name)
+        if not safe:
+            abort(404)
+        content = _read_worker_log(safe, max_bytes=2_000_000)
+        if not content:
+            abort(404)
+        return app.response_class(content, mimetype="text/plain; charset=utf-8")
+
+    @app.post("/admin/system/staff/save")
+    @admin_required
+    def admin_staff_save():
+        if not _admin_csrf_ok(): abort(400)
+        cfg = {
+            "base_url": request.form.get("base_url", "").strip().rstrip("/"),
+            "staff_path": request.form.get("staff_path", "").strip(),
+            "away_path": request.form.get("away_path", "").strip(),
+            "photo_path_template": request.form.get("photo_path_template", "").strip(),
+        }
+        if not cfg["base_url"].startswith("https://") or "{id}" not in cfg["photo_path_template"]:
+            flash("Kontrollera CMS-basadress och bildendpoint. Bildendpoint måste innehålla {id}.", "error")
+            return redirect(url_for("admin_system"))
+        _write_staff_config(cfg)
+        flash("CMS personalkatalog-konfigurationen sparades.", "success")
+        return redirect(url_for("admin_system"))
+
+    @app.post("/admin/system/staff/test")
+    @admin_required
+    def admin_staff_test():
+        if not _admin_csrf_ok(): abort(400)
+        token = _cms_access_token()
+        if not token:
+            flash("Din nuvarande Hello-session saknar en giltig CMS access token. Logga in med Hopefli igen och testa på nytt.", "error")
+            return redirect(url_for("admin_system"))
+        try:
+            diag = _staff_service().diagnose_staff(token)
+            session["staff_diag"] = diag
+            flash(f"CMS personalkatalog fungerar. {diag['received']} post(er) mottagna, {diag['shown']} visas och {diag['filtered']} filtreras bort.", "success")
+        except StaffAuthExpired:
+            flash("CMS nekade access token (401/403). Logga in på nytt och kontrollera API-behörigheten för hopefli-hello.", "error")
+        except Exception as exc:
+            logger.warning("Staff API test failed type=%s", exc.__class__.__name__)
+            flash("CMS personalkatalog kunde inte nås med den konfigurerade endpointen.", "error")
+        return redirect(url_for("admin_system"))
+
+    @app.post("/admin/system/app-log")
+    @admin_required
+    def admin_app_log():
+        if not _admin_csrf_ok(): abort(400)
+        job_id = _queue_job("applog")
+        logger.info("Application log queued sub=%s job=%s", current_user().get("sub"), job_id)
+        flash("Applikationsloggen är köad. Host-workern hämtar loggen nu; ladda om sidan om några sekunder.", "success")
+        return redirect(url_for("admin_system"))
 
     @app.post("/admin/system/github/save")
     @admin_required
@@ -785,5 +1187,213 @@ def create_app():
         logger.warning("Web update queued sub=%s version=%s job=%s", current_user().get("sub"), version, job_id)
         flash(f"Hello {version} är uppladdad och installationen är köad. Sidan kan starta om under uppdateringen.", "success")
         return redirect(url_for("admin_system"))
+
+    @app.get("/admin/branding")
+    @admin_required
+    def admin_branding():
+        csrf = secrets.token_urlsafe(32)
+        session["admin_branding_csrf"] = csrf
+        return render_template("admin_branding.html", csrf=csrf)
+
+    @app.post("/admin/branding")
+    @admin_required
+    def admin_branding_save():
+        expected = session.get("admin_branding_csrf") or ""
+        if not expected or not secrets.compare_digest(expected, request.form.get("csrf", "")):
+            abort(400)
+        BRANDING_DIR.mkdir(parents=True, exist_ok=True)
+        changed = False
+        for field, target, allowed, max_bytes in [
+            ("logo", "logo", {"image/png", "image/jpeg", "image/webp"}, 4*1024*1024),
+            ("favicon", "favicon", {"image/png", "image/x-icon", "image/vnd.microsoft.icon", "image/webp"}, 1024*1024),
+        ]:
+            f = request.files.get(field)
+            if f and f.filename:
+                content = f.read(max_bytes + 1)
+                if len(content) > max_bytes:
+                    flash(f"{field.capitalize()} är för stor.", "error")
+                    return redirect(url_for("admin_branding"))
+                if f.mimetype not in allowed:
+                    flash(f"Ogiltigt filformat för {field}.", "error")
+                    return redirect(url_for("admin_branding"))
+                out = BRANDING_DIR / target
+                tmp = BRANDING_DIR / f".{target}.tmp"
+                tmp.write_bytes(content)
+                os.chmod(tmp, 0o644)
+                tmp.replace(out)
+                meta_path = BRANDING_DIR / "branding.json"
+                try:
+                    meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+                except Exception:
+                    meta = {}
+                meta[target] = {"mimetype": f.mimetype, "filename": secure_filename(f.filename)}
+                meta_tmp = BRANDING_DIR / ".branding.json.tmp"
+                meta_tmp.write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n")
+                os.chmod(meta_tmp, 0o600)
+                meta_tmp.replace(meta_path)
+                changed = True
+        if request.form.get("remove_logo") == "1":
+            (BRANDING_DIR / "logo").unlink(missing_ok=True); changed = True
+        if request.form.get("remove_favicon") == "1":
+            (BRANDING_DIR / "favicon").unlink(missing_ok=True); changed = True
+        if changed:
+            meta_path = BRANDING_DIR / "branding.json"
+            if meta_path.exists():
+                try:
+                    meta = json.loads(meta_path.read_text())
+                    if request.form.get("remove_logo") == "1": meta.pop("logo", None)
+                    if request.form.get("remove_favicon") == "1": meta.pop("favicon", None)
+                    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n")
+                    os.chmod(meta_path, 0o600)
+                except Exception:
+                    logger.exception("Could not update branding metadata")
+        flash("Brandingen uppdaterades." if changed else "Ingen fil valdes.", "success" if changed else "error")
+        return redirect(url_for("admin_branding"))
+
+    def _apply_handbook_payload(payload: dict) -> dict:
+        if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+            raise ValueError("Ogiltigt handboksformat eller schema_version.")
+        categories = payload.get("categories")
+        if not isinstance(categories, list):
+            raise ValueError("Handboken saknar categories-lista.")
+        result = {"categories_created": 0, "categories_updated": 0, "articles_created": 0, "articles_updated": 0}
+        for raw_cat in categories:
+            if not isinstance(raw_cat, dict):
+                continue
+            name = str(raw_cat.get("name") or "").strip()[:120]
+            if not name:
+                continue
+            cat = DB.query(HandbookCategory).filter(HandbookCategory.name == name).first()
+            if cat is None:
+                cat = HandbookCategory(name=name, sort_order=int(raw_cat.get("sort_order") or 0))
+                DB.add(cat); DB.flush(); result["categories_created"] += 1
+            else:
+                cat.sort_order = int(raw_cat.get("sort_order") or cat.sort_order or 0)
+                result["categories_updated"] += 1
+            articles = raw_cat.get("articles") or []
+            if not isinstance(articles, list):
+                continue
+            for raw_article in articles:
+                if not isinstance(raw_article, dict):
+                    continue
+                title = str(raw_article.get("title") or "").strip()[:255]
+                body = str(raw_article.get("body") or "").strip()
+                if not title or not body:
+                    continue
+                article = DB.query(HandbookArticle).filter(HandbookArticle.category_id == cat.id, HandbookArticle.title == title).first()
+                if article is None:
+                    article = HandbookArticle(category_id=cat.id, title=title, body=body, published=bool(raw_article.get("published", True)), sort_order=int(raw_article.get("sort_order") or 0))
+                    DB.add(article); result["articles_created"] += 1
+                else:
+                    article.body = body
+                    article.published = bool(raw_article.get("published", True))
+                    article.sort_order = int(raw_article.get("sort_order") or article.sort_order or 0)
+                    article.updated_at = datetime.now(timezone.utc)
+                    result["articles_updated"] += 1
+        DB.commit()
+        return result
+
+    @app.post("/admin/handbook/import-standard")
+    @admin_required
+    def admin_handbook_import_standard():
+        csrf = session.get("admin_handbook_csrf") or ""
+        if not csrf or not secrets.compare_digest(csrf, request.form.get("csrf", "")): abort(400)
+        try:
+            payload = json.loads(HANDBOOK_STANDARD_PATH.read_text(encoding="utf-8"))
+            result = _apply_handbook_payload(payload)
+            flash(f"Hopefli-standarden är inlagd. {result['articles_created']} artiklar skapades och {result['articles_updated']} uppdaterades.", "success")
+        except Exception:
+            logger.exception("Could not import standard handbook")
+            flash("Kunde inte lägga in standardhandboken. Se applikationsloggen.", "error")
+        return redirect(url_for("admin_handbook"))
+
+    @app.post("/admin/handbook/import-json")
+    @admin_required
+    def admin_handbook_import_json():
+        csrf = session.get("admin_handbook_csrf") or ""
+        if not csrf or not secrets.compare_digest(csrf, request.form.get("csrf", "")): abort(400)
+        upload = request.files.get("handbook_file")
+        if not upload or not upload.filename:
+            flash("Välj en JSON-fil.", "error"); return redirect(url_for("admin_handbook"))
+        try:
+            raw = upload.read(1024 * 1024 + 1)
+            if len(raw) > 1024 * 1024:
+                raise ValueError("Filen är för stor.")
+            payload = json.loads(raw.decode("utf-8"))
+            result = _apply_handbook_payload(payload)
+            flash(f"Import klar. {result['articles_created']} artiklar skapades och {result['articles_updated']} uppdaterades.", "success")
+        except Exception as exc:
+            logger.warning("Handbook JSON import failed: %s", exc.__class__.__name__)
+            flash("Importen misslyckades. Kontrollera att filen är en giltig Hopefli-handbok i JSON-format.", "error")
+        return redirect(url_for("admin_handbook"))
+
+    @app.get("/admin/handbook/export-json")
+    @admin_required
+    def admin_handbook_export_json():
+        categories = DB.query(HandbookCategory).order_by(HandbookCategory.sort_order.asc(), HandbookCategory.name.asc()).all()
+        payload = {"schema_version": 1, "name": "Hopefli Personalhandbok", "categories": []}
+        for cat in categories:
+            articles = DB.query(HandbookArticle).filter_by(category_id=cat.id).order_by(HandbookArticle.sort_order.asc(), HandbookArticle.title.asc()).all()
+            payload["categories"].append({"name": cat.name, "sort_order": cat.sort_order, "articles": [{"title": a.title, "body": a.body, "published": bool(a.published), "sort_order": a.sort_order} for a in articles]})
+        uncat = DB.query(HandbookArticle).filter_by(category_id=0).order_by(HandbookArticle.sort_order.asc(), HandbookArticle.title.asc()).all()
+        if uncat:
+            payload["categories"].append({"name": "Övrigt", "sort_order": 999, "articles": [{"title": a.title, "body": a.body, "published": bool(a.published), "sort_order": a.sort_order} for a in uncat]})
+        buf = BytesIO((json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+        return send_file(buf, mimetype="application/json", as_attachment=True, download_name="hopefli-personalhandbok.json")
+
+    @app.route("/admin/handbook", methods=["GET", "POST"])
+    @admin_required
+    def admin_handbook():
+        csrf = session.get("admin_handbook_csrf")
+        if not csrf:
+            csrf = secrets.token_urlsafe(32); session["admin_handbook_csrf"] = csrf
+        if request.method == "POST":
+            if not secrets.compare_digest(csrf, request.form.get("csrf", "")): abort(400)
+            kind = request.form.get("kind")
+            if kind == "category":
+                name = request.form.get("name", "").strip()
+                if name:
+                    DB.add(HandbookCategory(name=name, sort_order=int(request.form.get("sort_order") or 0)))
+                    DB.commit(); flash("Kategorin skapades.", "success")
+            elif kind == "article":
+                title = request.form.get("title", "").strip(); body = request.form.get("body", "").strip()
+                if title and body:
+                    DB.add(HandbookArticle(category_id=int(request.form.get("category_id") or 0), title=title, body=body, published=bool(request.form.get("published")), sort_order=int(request.form.get("sort_order") or 0)))
+                    DB.commit(); flash("Artikeln sparades.", "success")
+            return redirect(url_for("admin_handbook"))
+        categories = DB.query(HandbookCategory).order_by(HandbookCategory.sort_order.asc(), HandbookCategory.name.asc()).all()
+        articles = DB.query(HandbookArticle).order_by(HandbookArticle.sort_order.asc(), HandbookArticle.title.asc()).all()
+        return render_template("admin_handbook.html", csrf=csrf, categories=categories, articles=articles)
+
+    @app.route("/admin/handbook/article/<int:article_id>", methods=["GET", "POST"])
+    @admin_required
+    def admin_handbook_article(article_id):
+        article = DB.get(HandbookArticle, article_id)
+        if not article: abort(404)
+        csrf = session.get("admin_handbook_csrf") or secrets.token_urlsafe(32); session["admin_handbook_csrf"] = csrf
+        if request.method == "POST":
+            if not secrets.compare_digest(csrf, request.form.get("csrf", "")): abort(400)
+            if request.form.get("delete") == "1":
+                DB.delete(article); DB.commit(); flash("Artikeln togs bort.", "success"); return redirect(url_for("admin_handbook"))
+            article.title = request.form.get("title", "").strip() or article.title
+            article.body = request.form.get("body", "").strip() or article.body
+            article.category_id = int(request.form.get("category_id") or 0)
+            article.published = bool(request.form.get("published"))
+            article.sort_order = int(request.form.get("sort_order") or 0)
+            article.updated_at = datetime.now(timezone.utc)
+            DB.commit(); flash("Artikeln uppdaterades.", "success"); return redirect(url_for("admin_handbook"))
+        categories = DB.query(HandbookCategory).order_by(HandbookCategory.sort_order.asc(), HandbookCategory.name.asc()).all()
+        return render_template("admin_handbook_edit.html", csrf=csrf, categories=categories, article=article)
+
+    @app.post("/admin/handbook/category/<int:category_id>/delete")
+    @admin_required
+    def admin_handbook_category_delete(category_id):
+        csrf = session.get("admin_handbook_csrf") or ""
+        if not csrf or not secrets.compare_digest(csrf, request.form.get("csrf", "")): abort(400)
+        cat = DB.get(HandbookCategory, category_id)
+        if not cat: abort(404)
+        DB.query(HandbookArticle).filter_by(category_id=category_id).update({"category_id": 0})
+        DB.delete(cat); DB.commit(); flash("Kategorin togs bort. Artiklarna ligger nu utan kategori.", "success")
+        return redirect(url_for("admin_handbook"))
 
     return app

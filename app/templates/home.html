@@ -2,10 +2,30 @@
 <section class="hero"><div><p class="eyebrow">{{ now.strftime('%A %d %B') }}</p><h1>{{ greeting }}, {{ me.name.split(' ')[0] }}.</h1><p class="quote">“{{ quote }}”</p></div><div class="hero-orb">H</div></section>
 <section class="system-grid">
   <a class="system-card cms" href="{{ config.get('CMS_URL','https://cms.hopefli.se') }}"><div><span>01</span><h2>CMS</h2><p>Kunder, offerter, ekonomi och försäljning.</p></div><b>Öppna →</b></a>
-  <a class="system-card event" href="{{ config.get('EVENT_URL','https://cms.hopefli.se/events') }}"><div><span>02</span><h2>Event</h2><p>Planering, deltagare och kommande upplevelser.</p></div><b>Öppna →</b></a>
-  <a class="system-card docs" href="{{ config.get('BOOKSTACK_URL','https://docs.hopefli.se') }}"><div><span>03</span><h2>BookStack</h2><p>Rutiner, dokumentation och manualer.</p></div><b>Öppna →</b></a>
+  <a class="system-card event" href="https://spela.hopefli.se"><div><span>02</span><h2>Spela</h2><p>Quiz, musik och aktiviteter.</p></div><b>Öppna →</b></a>
+  <a class="system-card docs" href="{{ config.get('BOOKSTACK_URL','https://bookstack.hopefli.se') }}"><div><span>03</span><h2>BookStack</h2><p>Rutiner, dokumentation och manualer.</p></div><b>Öppna →</b></a>
 </section>
-<section class="two-col"><div class="panel"><div class="panel-head"><div><p class="eyebrow">PÅ GÅNG</p><h2>Kommande event</h2></div><a href="{{ config.get('EVENT_URL','https://cms.hopefli.se/events') }}">Visa alla →</a></div><div class="empty-event"><strong>Eventkopplingen är förberedd.</strong><p>Nästa steg är att ansluta CMS/Event-API:t så visas kommande event här automatiskt.</p></div></div>
+<section class="two-col"><div class="panel jobs-dashboard-panel"><div class="panel-head"><div><p class="eyebrow">PÅ GÅNG</p><h2>Kommande uppdrag</h2></div><a href="{{ url_for('jobs') }}">Visa alla →</a></div>
+{% if jobs["items"] %}<div class="dashboard-jobs">{% for job in jobs["items"] %}<a href="{{ url_for('jobs') }}" class="dashboard-job"><div class="dashboard-job-date"><strong>{{ job.date_short }}</strong>{% if job.time_display %}<span>{{ job.time_display }}</span>{% endif %}</div><div class="dashboard-job-main"><strong>{{ job.name }}</strong><span>{{ job.place_display }}</span><small>Ansvarig: {{ job.responsible_name or 'ej utsedd' }}</small></div><span class="job-status {{ job.status }}">{% if job.is_now %}Pågår nu{% else %}{{ job.status_label }}{% endif %}</span></a>{% endfor %}</div>
+{% elif jobs.needs_reauth %}<p class="muted">Logga in med Hopefli igen för att visa uppdrag.</p>
+{% elif jobs.unavailable %}<p class="muted">Uppdragen kan inte hämtas från CMS just nu.</p>
+{% else %}<p class="muted">Inga bekräftade eller pågående uppdrag just nu.</p>{% endif %}
+{% if jobs.stale %}<small class="muted">Visar senast cachade CMS-data.</small>{% endif %}</div>
 <div class="panel"><div class="panel-head"><div><p class="eyebrow">INTERNT</p><h2>Senaste nytt</h2></div><a href="{{ url_for('news') }}">Alla nyheter →</a></div>{% if news %}{% for item in news %}<article class="news-row"><span>{{ item.published_at.strftime('%d %b') }}</span><div><h3>{{ item.title }}</h3><p>{{ item.body[:120] }}{% if item.body|length > 120 %}…{% endif %}</p></div></article>{% endfor %}{% else %}<p class="muted">Inga nyheter publicerade ännu.</p>{% endif %}</div></section>
-<section class="quick"><a href="{{ url_for('people') }}"><span>PERSONAL</span><strong>Hitta kollegor och kontaktuppgifter →</strong></a><a href="{{ config.get('BOOKSTACK_URL','https://docs.hopefli.se') }}"><span>PERSONALHANDBOK</span><strong>Rutiner, ledighet och information →</strong></a><a href="{{ config.get('PLAY_URL','https://play.hopefli.se') }}"><span>HOPEFLI PLAY</span><strong>Öppna Play →</strong></a></section>
+<section class="two-col staff-widgets">
+  <div class="panel"><div class="panel-head"><div><p class="eyebrow">IDAG</p><h2>Frånvarande idag</h2></div><a href="{{ url_for('people') }}">Personal →</a></div>
+    {% if staff.away %}<div class="staff-mini-list">{% for item in staff.away %}<div><strong>{{ item.name or item.email or 'Medarbetare' }}</strong><span>{{ item.type }}{% if item.until_display %} · till {{ item.until_display }}{% endif %}</span></div>{% endfor %}</div>
+    {% elif staff.needs_reauth %}<p class="muted">Logga in med Hopefli igen för att aktivera personalwidgets.</p>
+    {% elif staff.unavailable %}<p class="muted">Personaldata kan inte hämtas från CMS just nu.</p>
+    {% else %}<p class="muted">Ingen frånvaro rapporterad idag.</p>{% endif %}
+  </div>
+  <div class="panel"><div class="panel-head"><div><p class="eyebrow">PÅ GÅNG</p><h2>Födelsedagar & jubileum</h2></div></div>
+    {% if staff.birthdays or staff.anniversaries %}<div class="staff-mini-list">
+      {% for item in staff.birthdays %}<div><strong>{{ item.name }}</strong><span>🎂 {{ item.display }}</span></div>{% endfor %}
+      {% for item in staff.anniversaries %}<div><strong>{{ item.name }}</strong><span>🎉 {{ item.years }} år på Hopefli · {{ item.display }}</span></div>{% endfor %}
+    </div>{% elif staff.unavailable %}<p class="muted">Personaldata kan inte hämtas från CMS just nu.</p>{% else %}<p class="muted">Inget personalfirande de närmaste veckorna.</p>{% endif %}
+    {% if staff.stale %}<small class="muted">Visar senast cachade CMS-data.</small>{% endif %}
+  </div>
+</section>
+<section class="quick"><a href="{{ url_for('jobs') }}"><span>UPPDRAG</span><strong>Se kommande event och uppdrag →</strong></a><a href="{{ url_for('people') }}"><span>PERSONAL</span><strong>Hitta kollegor och kontaktuppgifter →</strong></a><a href="{{ url_for('handbook') }}"><span>PERSONALHANDBOK</span><strong>Rutiner, ledighet och information →</strong></a></section>
 {% endblock %}

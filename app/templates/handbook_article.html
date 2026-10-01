@@ -1,0 +1,3 @@
+{% extends "base.html" %}{% block title %}{{ article.title }} · Personalhandbok{% endblock %}{% block content %}
+<section class="article-shell"><a class="back-link" href="{{ url_for('handbook') }}">← Personalhandbok</a>{% if category %}<p class="eyebrow">{{category.name}}</p>{% endif %}<h1>{{article.title}}</h1><div class="article-body">{{ article.body }}</div>{% if me.role == 'admin' %}<p><a class="admin-link" href="{{ url_for('admin_handbook_article', article_id=article.id) }}">Redigera artikel →</a></p>{% endif %}</section>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Uppdrag · Hopefli Hello{% endblock %}
+{% block content %}
+<section class="page-head jobs-page-head">
+  <p class="eyebrow">PÅ GÅNG</p>
+  <h1>Uppdrag</h1>
+  <p>Bekräftade och pågående uppdrag hämtas direkt från Hopefli CMS. CMS är fortsatt master för all uppdragsdata.</p>
+</section>
+
+{% if needs_reauth %}
+<section class="panel staff-notice"><div><strong>Förnya CMS-sessionen</strong><p>Din Hello-session saknar en giltig CMS access token.</p></div><a class="admin-link" href="{{ url_for('auth_login', next='/uppdrag') }}">Logga in med Hopefli igen →</a></section>
+{% elif jobs_error %}
+<section class="panel staff-notice warning"><div><strong>Uppdragen kan inte nås just nu</strong><p>{{ jobs_error }}{% if jobs_meta.stale %} Senast cachade uppgifter visas nedan.{% endif %}</p></div></section>
+{% endif %}
+
+<div class="jobs-filter">
+  <a class="{% if status_filter == 'all' %}active{% endif %}" href="{{ url_for('jobs', status='all') }}">Alla</a>
+  <a class="{% if status_filter == 'confirmed' %}active{% endif %}" href="{{ url_for('jobs', status='confirmed') }}">Bekräftade</a>
+  <a class="{% if status_filter == 'ongoing' %}active{% endif %}" href="{{ url_for('jobs', status='ongoing') }}">Genomförs</a>
+</div>
+
+<section class="jobs-grid">
+{% for job in jobs %}
+  <article class="job-card {% if job.is_now %}now{% endif %}">
+    <div class="job-date"><strong>{{ job.date_short }}</strong>{% if job.time_display %}<span>{{ job.time_display }}</span>{% endif %}</div>
+    <div class="job-body">
+      <div class="job-title-row"><div><p class="eyebrow">{{ job.number or 'UPPDRAG' }}</p><h2>{{ job.name }}</h2></div><span class="job-status {{ job.status }}">{% if job.is_now %}Pågår nu{% else %}{{ job.status_label }}{% endif %}</span></div>
+      <p class="job-place">{{ job.place_display }}</p>
+      {% if job.address %}<p class="muted job-address">{{ job.address }}</p>{% endif %}
+      <div class="job-responsible"><small>ANSVARIG</small><strong>{{ job.responsible_name or 'Ansvarig ej utsedd' }}</strong></div>
+    </div>
+  </article>
+{% else %}
+  {% if not needs_reauth %}<div class="panel jobs-empty"><strong>Inga bekräftade eller pågående uppdrag just nu.</strong><p>När ett uppdrag hamnar i CMS-pipen visas det automatiskt här.</p></div>{% endif %}
+{% endfor %}
+</section>
+{% if jobs_meta.stale %}<p class="muted jobs-cache-note">Visar senast cachade CMS-data.</p>{% endif %}
+{% endblock %}

@@ -20,8 +20,29 @@
       <strong>Workerstatus</strong>
       <span>{{ worker.get('message','Ingen uppdatering har körts ännu.') }}</span>
       {% if worker.get('version') %}<small>Version {{ worker.get('version') }}</small>{% endif %}
+      {% if worker.get('job_id') %}<small>Jobb {{ worker.get('job_id') }}</small>{% endif %}
       {% if worker.get('updated_at') %}<small>{{ worker.get('updated_at') }}</small>{% endif %}
     </div>
+    {% if worker_log %}
+    <div class="cli-log">
+      <div class="cli-log-head"><strong>CLI-logg · {{ worker_log_name }}</strong><a href="{{ url_for('admin_system_log', name=worker_log_name) }}" target="_blank" rel="noopener">Öppna hela loggen ↗</a></div>
+      <pre>{{ worker_log }}</pre>
+    </div>
+    {% endif %}
+    <div class="action-row">
+      <form method="post" action="{{ url_for('admin_app_log') }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="secondary" type="submit">Hämta applikationslogg</button>
+      </form>
+    </div>
+    {% if worker_log_history %}
+    <div class="log-history">
+      <details>
+        <summary>Tidigare workerloggar ({{ worker_log_history|length }})</summary>
+        {% for row in worker_log_history %}<p><a href="{{ url_for('admin_system_log', name=row.name) }}" target="_blank" rel="noopener">{{ row.name }}</a><span class="log-meta">{{ row.size }} byte · {{ row.mtime }}</span></p>{% endfor %}
+      </details>
+    </div>
+    {% endif %}
   </div>
 
   <div class="panel">
@@ -41,6 +62,32 @@
       <form method="post" action="{{ url_for('admin_github_sync') }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary" type="submit">Synka aktuell version</button></form>
     </div>
   </div>
+</section>
+
+<section class="panel token-help">
+  <p class="eyebrow">CMS · PERSONALKATALOG</p>
+  <h2>Personal-API</h2>
+  <p class="muted">Hello hämtar personal server-side med den inloggade användarens OIDC access token. Standardvärdena följer CMS-kontraktet för intern personaldata och kan justeras här utan CLI.</p>
+  <form method="post" action="{{ url_for('admin_staff_save') }}" class="form staff-api-form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>CMS basadress <input name="base_url" value="{{ staff_api.base_url }}" required></label>
+    <label>Personallista <input name="staff_path" value="{{ staff_api.staff_path }}" required></label>
+    <label>Frånvarande idag <input name="away_path" value="{{ staff_api.away_path }}"></label>
+    <label>Profilbild <input name="photo_path_template" value="{{ staff_api.photo_path_template }}" required></label>
+    <small class="muted">Profilbildsrouten ska innehålla <code>{id}</code>. Access token sparas inte här.</small>
+    <button class="primary" type="submit">Spara API-konfiguration <span>→</span></button>
+  </form>
+  <div class="action-row"><form method="post" action="{{ url_for('admin_staff_test') }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary" type="submit">Testa & diagnostisera personal-API</button></form></div>
+  {% if staff_diag %}
+  <div class="staff-diagnostics">
+    <h3>Senaste personaldiagnostik</h3>
+    <p class="muted">CMS returnerade <strong>{{ staff_diag.received }}</strong> poster. <strong>{{ staff_diag.shown }}</strong> visas i Hello och <strong>{{ staff_diag.filtered }}</strong> filtreras bort.</p>
+    <div class="diag-table-wrap"><table class="diag-table"><thead><tr><th>Person</th><th>E-post</th><th>Bild</th><th>Status</th><th>Orsak</th></tr></thead><tbody>
+      {% for row in staff_diag.details %}<tr><td>{{ row.name }}</td><td>{{ row.email or '—' }}</td><td>{{ row.photo or '—' }}</td><td><strong>{{ row.status }}</strong></td><td>{{ row.reason }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    <small class="muted">Diagnostiken visar endast visningsrelevanta fält. Access token, interna secrets och råa API-svar visas inte.</small>
+  </div>
+  {% endif %}
 </section>
 
 <section class="panel token-help">

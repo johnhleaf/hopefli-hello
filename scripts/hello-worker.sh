@@ -4,7 +4,7 @@ APP_DIR="${APP_DIR:-/opt/hopefli-intranet}"
 INBOX="$APP_DIR/shared/update-inbox"
 STATUS="$INBOX/status.json"
 LOCK="$INBOX/.worker.lock"
-mkdir -p "$INBOX"
+mkdir -p "$INBOX" "$INBOX/logs"
 exec 9>"$LOCK"
 flock -n 9 || exit 0
 
@@ -43,7 +43,14 @@ PY
 }
 
 process_update(){
-  local job="$1" archive
+  local job="$1" archive job_id log_file log_path
+  job_id=$(python3 - "$job" <<'PYJOB'
+import json,sys
+print(json.load(open(sys.argv[1])).get("id","unknown"))
+PYJOB
+)
+  log_file="$(date -u +%Y%m%dT%H%M%SZ)-update-${job_id}.log"
+  log_path="$INBOX/logs/$log_file"
   archive=$(python3 - "$job" <<'PY'
 import json,sys,os
 j=json.load(open(sys.argv[1]))
@@ -52,22 +59,37 @@ PY
 )
   local path="$INBOX/$archive"
   [[ -f "$path" ]] || { write_status error update "Uppladdningsfilen saknas."; return 1; }
-  write_status running update "Verifierar och installerar uppdateringen..."
-  safe_tar "$path"
-  if "$APP_DIR/current/update.sh" "$path" >"$INBOX/last-update.log" 2>&1; then
+  write_status running update "Verifierar och installerar uppdateringen..." "{\"job_id\":\"$job_id\",\"log_file\":\"$log_file\"}"
+  { echo "=== Hopefli Hello update worker ==="; echo "UTC: $(date -u --iso-8601=seconds)"; echo "Job: $job_id"; echo "Archive: $(basename "$path")"; echo; } >"$log_path"
+  if ! safe_tar "$path" >>"$log_path" 2>&1; then
+    cp "$log_path" "$INBOX/last-update.log" || true
+    write_status error update "Releasepaketet underkändes av worker-valideringen." "{\"job_id\":\"$job_id\",\"log_file\":\"$log_file\"}"
+    return 1
+  fi
+  if "$APP_DIR/current/update.sh" "$path" >>"$log_path" 2>&1; then
+    cp "$log_path" "$INBOX/last-update.log" || true
     local ver
     ver=$(curl -fsS "http://127.0.0.1:${APP_PORT:-8097}/health" 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version","ok"))' 2>/dev/null || echo ok)
-    write_status success update "Uppdateringen installerades." "{\"version\":\"$ver\"}"
+    write_status success update "Uppdateringen installerades." "{\"version\":\"$ver\",\"job_id\":\"$job_id\",\"log_file\":\"$log_file\"}"
     rm -f "$path"
   else
-    tail -n 30 "$INBOX/last-update.log" > "$INBOX/last-update-tail.log" || true
-    write_status error update "Uppdateringen misslyckades. Se serverloggen för detaljer."
+    cp "$log_path" "$INBOX/last-update.log" || true
+    tail -n 60 "$log_path" > "$INBOX/last-update-tail.log" || true
+    write_status error update "Uppdateringen misslyckades. CLI-loggen visas nedan." "{\"job_id\":\"$job_id\",\"log_file\":\"$log_file\"}"
     return 1
   fi
 }
 
 process_github(){
-  local job="$1"
+  local job="$1" job_id log_file log_path
+  job_id=$(python3 - "$job" <<'PYJOB'
+import json,sys
+print(json.load(open(sys.argv[1])).get("id","unknown"))
+PYJOB
+)
+  log_file="$(date -u +%Y%m%dT%H%M%SZ)-github-${job_id}.log"
+  log_path="$INBOX/logs/$log_file"
+  : >"$log_path"
   local cfg="$APP_DIR/shared/hello-config/github.json"
   [[ -f "$cfg" ]] || { write_status error github "GitHub är inte konfigurerat."; return 1; }
   local repo branch token
@@ -85,7 +107,7 @@ PY
 )
   [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { write_status error github "Ogiltigt repository-format."; return 1; }
   [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]] || { write_status error github "Ogiltigt branchnamn."; return 1; }
-  write_status running github "Synkar aktuell Hello-release till GitHub..."
+  write_status running github "Synkar aktuell Hello-release till GitHub..." "{\"job_id\":\"$job_id\",\"log_file\":\"$log_file\"}"
   local tmp askpass
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' RETURN
@@ -99,37 +121,64 @@ esac
 ASK
   chmod 700 "$askpass"
   export GIT_ASKPASS="$askpass" GITHUB_TOKEN="$token" GIT_TERMINAL_PROMPT=0
-  if ! git clone "https://github.com/$repo.git" "$tmp/repo" >"$INBOX/last-github.log" 2>&1; then
-    write_status error github "Kunde inte klona GitHub-repot. Kontrollera repo och token."
+  if ! git clone "https://github.com/$repo.git" "$tmp/repo" >"$log_path" 2>&1; then
+    cp "$log_path" "$INBOX/last-github.log" || true
+    write_status error github "Kunde inte klona GitHub-repot. Kontrollera repo och token." "{\"job_id\":\"$job_id\",\"log_file\":\"$log_file\"}"
     return 1
   fi
   git -C "$tmp/repo" config user.name "Hopefli Hello"
   git -C "$tmp/repo" config user.email "hello@hopefli.se"
   if git -C "$tmp/repo" show-ref --verify --quiet "refs/remotes/origin/$branch"; then
-    git -C "$tmp/repo" checkout -B "$branch" "origin/$branch" >>"$INBOX/last-github.log" 2>&1
+    git -C "$tmp/repo" checkout -B "$branch" "origin/$branch" >>"$log_path" 2>&1
   else
-    git -C "$tmp/repo" checkout -B "$branch" >>"$INBOX/last-github.log" 2>&1
+    git -C "$tmp/repo" checkout -B "$branch" >>"$log_path" 2>&1
   fi
-  git -C "$tmp/repo" rm -r --ignore-unmatch . >>"$INBOX/last-github.log" 2>&1 || true
+  git -C "$tmp/repo" rm -r --ignore-unmatch . >>"$log_path" 2>&1 || true
   cp -a "$APP_DIR/current/." "$tmp/repo/"
   find "$tmp/repo" -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
   find "$tmp/repo" -type f -name '*.pyc' -delete 2>/dev/null || true
   git -C "$tmp/repo" add -A
   if git -C "$tmp/repo" diff --cached --quiet; then
-    write_status success github "GitHub är redan synkat med aktuell release."
+    cp "$log_path" "$INBOX/last-github.log" || true
+    write_status success github "GitHub är redan synkat med aktuell release." "{\"job_id\":\"$job_id\",\"log_file\":\"$log_file\"}"
     return 0
   fi
   local ver
   ver=$(cat "$APP_DIR/current/VERSION" 2>/dev/null || echo unknown)
-  git -C "$tmp/repo" commit -m "Sync Hopefli Hello v$ver" >>"$INBOX/last-github.log" 2>&1
-  if git -C "$tmp/repo" push -u origin "$branch" >>"$INBOX/last-github.log" 2>&1; then
+  git -C "$tmp/repo" commit -m "Sync Hopefli Hello v$ver" >>"$log_path" 2>&1
+  if git -C "$tmp/repo" push -u origin "$branch" >>"$log_path" 2>&1; then
     local sha
     sha=$(git -C "$tmp/repo" rev-parse --short HEAD)
-    write_status success github "GitHub-synk klar." "{\"commit\":\"$sha\",\"repo\":\"$repo\",\"branch\":\"$branch\"}"
+    cp "$log_path" "$INBOX/last-github.log" || true
+    write_status success github "GitHub-synk klar." "{\"commit\":\"$sha\",\"repo\":\"$repo\",\"branch\":\"$branch\",\"job_id\":\"$job_id\",\"log_file\":\"$log_file\"}"
   else
-    write_status error github "GitHub-synken misslyckades. Kontrollera tokenbehörigheter och repository."
+    cp "$log_path" "$INBOX/last-github.log" || true
+    write_status error github "GitHub-synken misslyckades. CLI-loggen visas nedan." "{\"job_id\":\"$job_id\",\"log_file\":\"$log_file\"}"
     return 1
   fi
+}
+
+
+process_applog(){
+  local job="$1" job_id log_file log_path
+  job_id=$(python3 - "$job" <<'PYJOB'
+import json,sys
+print(json.load(open(sys.argv[1])).get("id","unknown"))
+PYJOB
+)
+  log_file="$(date -u +%Y%m%dT%H%M%SZ)-app-${job_id}.log"
+  log_path="$INBOX/logs/$log_file"
+  write_status running applog "Hämtar applikationslogg från Hello-containern..." "{\"job_id\":\"$job_id\",\"log_file\":\"$log_file\"}"
+  {
+    echo "=== Hopefli Hello application log ==="
+    echo "UTC: $(date -u --iso-8601=seconds)"
+    echo "Job: $job_id"
+    echo
+    cd "$APP_DIR"
+    docker compose logs app --tail=300 --timestamps 2>&1
+  } >"$log_path" || true
+  cp "$log_path" "$INBOX/last-app.log" || true
+  write_status success applog "Applikationsloggen hämtades." "{\"job_id\":\"$job_id\",\"log_file\":\"$log_file\"}"
 }
 
 shopt -s nullglob
@@ -142,6 +191,7 @@ PY
   case "$kind" in
     update) process_update "$job.running" || true ;;
     github) process_github "$job.running" || true ;;
+    applog) process_applog "$job.running" || true ;;
     *) write_status error unknown "Okänd worker-order." ;;
   esac
   rm -f "$job.running"

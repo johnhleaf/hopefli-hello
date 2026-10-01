@@ -16,7 +16,22 @@ find "$ROOT" -type f -exec chmod 644 {} +
 chmod 755 "$ROOT/install.sh" "$ROOT/update.sh" "$ROOT/scripts/hello-worker.sh" "$ROOT/scripts/github-sync.sh" 2>/dev/null || true
 VERSION=$(cat "$ROOT/VERSION")
 REL="$APP_DIR/releases/$VERSION"
-[[ ! -e "$REL" ]] || { echo "Version $VERSION finns redan."; exit 1; }
+CURRENT=$(readlink -f "$APP_DIR/current" 2>/dev/null || true)
+if [[ -e "$REL" ]]; then
+  REL_REAL=$(readlink -f "$REL" 2>/dev/null || printf '%s' "$REL")
+  if [[ -n "$CURRENT" && "$REL_REAL" == "$CURRENT" ]]; then
+    echo "Version $VERSION är redan aktiv. Avbryter för att inte skriva över en körande release."
+    exit 1
+  fi
+  # En tidigare misslyckad/inaktiv release ska inte blockera ett nytt försök.
+  # Flytta undan den för felsökning i stället för att radera den.
+  TS_STALE=$(date +%Y%m%d-%H%M%S)
+  FAILED_DIR="$APP_DIR/releases-failed"
+  mkdir -p "$FAILED_DIR"
+  STALE_TARGET="$FAILED_DIR/${VERSION}-${TS_STALE}"
+  echo "Version $VERSION finns som inaktiv release. Flyttar undan den till $STALE_TARGET och försöker igen."
+  mv "$REL" "$STALE_TARGET"
+fi
 
 # Testa koden innan aktivering.
 docker build -t "hopefli-hello-test:$VERSION" "$ROOT" >/dev/null

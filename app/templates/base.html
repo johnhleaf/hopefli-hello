@@ -4,13 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{% block title %}Hopefli Hello{% endblock %}</title>
+  {% if favicon_exists %}<link rel="icon" href="{{ url_for('branding_asset', kind='favicon') }}?v={{ app_version }}">{% endif %}
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="{{ url_for('home') if me else url_for('login') }}"><span class="brand-mark">H</span><span>HOPEFLI <small>HELLO</small></span></a>
+    <a class="brand" href="{{ url_for('home') if me else url_for('login') }}">{% if logo_exists %}<img class="brand-logo-img" src="{{ url_for('branding_asset', kind='logo') }}?v={{ app_version }}" alt="Hopefli">{% else %}<span class="brand-mark">H</span><span>HOPEFLI <small>HELLO</small></span>{% endif %}</a>
     {% if me %}
-    <nav><a href="{{ url_for('home') }}">Hem</a><a href="{{ url_for('people') }}">Personal</a><a href="{{ url_for('news') }}">Nyheter</a>{% if me.role == 'admin' %}<a href="{{ url_for('admin') }}">Admin</a>{% endif %}</nav>
+    <nav><a href="{{ url_for('home') }}">Hem</a><a href="{{ url_for('people') }}">Personal</a><a href="{{ url_for('handbook') }}">Personalhandbok</a><a href="{{ url_for('news') }}">Nyheter</a>{% if me.role == 'admin' %}<a href="{{ url_for('admin') }}">Admin</a>{% endif %}</nav>
     <div class="user-chip"><span>{{ me.name }}</span><form method="post" action="{{ url_for('logout') }}"><button>Logga ut</button></form></div>
     {% endif %}
   </header>

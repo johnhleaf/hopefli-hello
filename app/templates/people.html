@@ -1,1 +1,49 @@
-{% extends "base.html" %}{% block content %}<section class="page-head"><p class="eyebrow">MÄNNISKORNA</p><h1>Personal</h1><p>Kollegor som har loggat in i Hopefli Hello visas här. Senare kan listan kompletteras via ett separat CMS-API.</p></section><section class="people-grid">{% for u in users %}<article class="person"><div class="avatar">{{ u.name[:1] }}</div><div><h3>{{u.name}}</h3><p>{{u.role|capitalize}}</p>{% if u.email %}<a href="mailto:{{u.email}}">{{u.email}}</a>{% endif %}</div></article>{% else %}<p>Ingen personal har synkats ännu.</p>{% endfor %}</section>{% endblock %}
+{% extends "base.html" %}
+{% block title %}Personal · Hopefli Hello{% endblock %}
+{% block content %}
+<section class="page-head staff-page-head">
+  <p class="eyebrow">MÄNNISKORNA</p>
+  <h1>Personal</h1>
+  <p>Kontaktuppgifter och vardagsinformation hämtas direkt från Hopefli CMS. Ändringar görs alltid där.</p>
+</section>
+
+{% if needs_reauth %}
+<section class="panel staff-notice"><div><strong>Förnya CMS-sessionen</strong><p>Din nuvarande Hello-session skapades utan en användbar CMS access token eller så har token gått ut.</p></div><a class="admin-link" href="{{ url_for('auth_login', next='/personal') }}">Logga in med Hopefli igen →</a></section>
+{% elif staff_error %}
+<section class="panel staff-notice warning"><div><strong>Personalkatalogen kan inte nås just nu</strong><p>{{ staff_error }}{% if staff_meta.stale %} Senast cachade uppgifter visas nedan.{% endif %}</p></div></section>
+{% endif %}
+
+<section class="staff-toolbar">
+  <form method="get" action="{{ url_for('people') }}" class="staff-search">
+    <input name="q" value="{{ query }}" placeholder="Sök namn, roll, e-post eller telefon…" aria-label="Sök personal">
+    <button class="secondary" type="submit">Sök</button>
+    {% if query %}<a href="{{ url_for('people') }}">Rensa</a>{% endif %}
+  </form>
+  <span>{{ users|length }} person{% if users|length != 1 %}er{% endif %}{% if staff_meta.stale %} · cache kan vara inaktuell{% endif %}</span>
+</section>
+
+<section class="people-grid staff-directory">
+{% for u in users %}
+  <article class="person-card">
+    <div class="person-photo-wrap">
+      {% if u.photo_token %}<img class="person-photo" src="{{ url_for('staff_photo', token=u.photo_token) }}" alt="Profilbild för {{ u.name }}" loading="lazy">
+      {% else %}<div class="person-photo person-initials">{% for part in u.name.split()[:2] %}{{ part[:1]|upper }}{% endfor %}</div>{% endif %}
+    </div>
+    <div class="person-card-body">
+      <p class="eyebrow">{{ u.role or 'Hopefli' }}</p>
+      <h2>{{ u.name }}</h2>
+      <div class="person-contact">
+        {% if u.email %}<a href="mailto:{{ u.email }}">{{ u.email }}</a>{% endif %}
+        {% if u.phone %}<a href="tel:{{ u.phone|replace(' ','') }}">{{ u.phone }}</a>{% endif %}
+      </div>
+      <dl class="person-meta">
+        {% if u.employment_display %}<div><dt>Anställd sedan</dt><dd>{{ u.employment_display }}</dd></div>{% endif %}
+        {% if u.birthday_display %}<div><dt>Fyller år</dt><dd>{{ u.birthday_display }}</dd></div>{% endif %}
+      </dl>
+    </div>
+  </article>
+{% else %}
+  {% if not needs_reauth %}<div class="panel staff-empty"><strong>Ingen personal att visa.</strong><p>{% if query %}Ingen matchade din sökning.{% else %}CMS returnerade inga personer markerade för Hopefli Hello.{% endif %}</p></div>{% endif %}
+{% endfor %}
+</section>
+{% endblock %}

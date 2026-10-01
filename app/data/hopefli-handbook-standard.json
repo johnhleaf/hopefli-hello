@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "name": "Hopefli Personalhandbok",
+  "description": "Kort, praktisk standardhandbok för vardagen på Hopefli.",
+  "categories": [
+    {
+      "name": "Välkommen & vardag",
+      "sort_order": 10,
+      "articles": [
+        {
+          "title": "Så jobbar vi på Hopefli",
+          "sort_order": 10,
+          "published": true,
+          "body": "Vi vill att det ska vara enkelt att göra ett bra jobb på Hopefli. Vi tar ansvar, hjälper varandra och försöker lösa problem tidigt.\n\nNär du är osäker: fråga. När något ändras: berätta. När något viktigt beslutas: dokumentera det där nästa person kan hitta det.\n\nVi ska uppfattas som professionella, varma, lösningsorienterade och pålitliga – både mot kunder och mot varandra."
+        },
+        {
+          "title": "Kommunikation & dokumentation",
+          "sort_order": 20,
+          "published": true,
+          "body": "Brådskande frågor tar vi direkt. Sådant som andra behöver känna till dokumenteras i rätt system.\n\nKund- och uppdragsinformation hör hemma i Hopeflis system, och längre rutiner eller teknisk dokumentation kan ligga i BookStack. Viktiga beslut ska inte bara finnas i en privat chatt.\n\nTänk: kan nästa person förstå vad som hänt utan att behöva fråga mig?"
+        },
+        {
+          "title": "Möten & planering",
+          "sort_order": 30,
+          "published": true,
+          "body": "Möten ska ha ett tydligt syfte. Kom förberedd och i tid, och försök hålla mötet så kort som uppgiften tillåter.\n\nInför kunduppdrag och event ska ansvar, tider och viktiga förutsättningar vara tydliga i god tid. Upptäcker du en oklarhet – lyft den innan den blir ett problem på plats."
+        }
+      ]
+    },
+    {
+      "name": "Tid, ledighet & frånvaro",
+      "sort_order": 20,
+      "articles": [
+        {
+          "title": "Arbetstid & uppdrag",
+          "sort_order": 10,
+          "published": true,
+          "body": "Arbetstider kan variera mellan roller och uppdrag. Event och kundaktiviteter kan innebära arbete på andra tider än en vanlig arbetsdag.\n\nÖverenskomna tider, möten och deadlines ska hållas. Behöver du göra en större förändring i din arbetstid eller tillgänglighet stämmer du av det med ansvarig i god tid."
+        },
+        {
+          "title": "Sjukfrånvaro & VAB",
+          "sort_order": 20,
+          "published": true,
+          "body": "Om du blir sjuk eller behöver VAB meddelar du ansvarig så snart som möjligt, helst innan arbetsdagen eller uppdraget börjar.\n\nBerätta om något tidskritiskt behöver lämnas över. Du behöver inte lämna medicinska detaljer.\n\nRegistrera frånvaron enligt Hopeflis aktuella rutin och de regler som gäller för respektive frånvarotyp."
+        },
+        {
+          "title": "Semester & annan ledighet",
+          "sort_order": 30,
+          "published": true,
+          "body": "Semester och längre ledighet planeras i god tid. Skicka önskemålet enligt Hopeflis aktuella rutin och invänta godkännande innan du bokar något som förutsätter ledigheten.\n\nVid planeringen behöver vi ta hänsyn till kunduppdrag, event, bemanning och övrig ledighet. Målet är att hitta en lösning som fungerar både för dig och verksamheten."
+        }
+      ]
+    },
+    {
+      "name": "Kund & event",
+      "sort_order": 30,
+      "articles": [
+        {
+          "title": "Kundbemötande",
+          "sort_order": 10,
+          "published": true,
+          "body": "När du möter en kund representerar du Hopefli. Var vänlig, tydlig, lösningsorienterad och professionell.\n\nLova inte sådant du inte vet att vi kan hålla. Om en fråga påverkar pris, omfattning, bemanning eller leverans – stäm av med ansvarig innan du lovar något."
+        },
+        {
+          "title": "Inför ett event eller uppdrag",
+          "sort_order": 20,
+          "published": true,
+          "body": "Inför ett uppdrag ska du känna till plats, tid, ansvarig, din roll och de viktigaste förutsättningarna. Kontrollera att utrustning och material som du ansvarar för finns med och fungerar.\n\nVar ute i god tid. Om något saknas eller är oklart ska det lyftas innan eventet börjar."
+        },
+        {
+          "title": "På plats",
+          "sort_order": 30,
+          "published": true,
+          "body": "På plats prioriterar vi säkerhet, kundens upplevelse och ett lugnt arbetssätt. Håll koll på tider och vem som fattar beslut.\n\nProblem händer. Fokusera först på att lösa situationen och informera rätt person. Diskutera skuld eller interna problem efteråt – inte framför kund eller deltagare."
+        },
+        {
+          "title": "Ändringar & avvikelser",
+          "sort_order": 40,
+          "published": true,
+          "body": "Ändringar som påverkar pris, omfattning, tider, bemanning eller utrustning ska förankras med ansvarig innan de lovas till kunden.\n\nRapportera avvikelser som förseningar, skador, kundklagomål, säkerhetsproblem eller tekniska fel. Syftet är att kunna agera snabbt och lära oss till nästa gång."
+        },
+        {
+          "title": "Efter eventet",
+          "sort_order": 50,
+          "published": true,
+          "body": "Efter avslutat event återställer vi utrustning och lämnar platsen på ett bra sätt. Kontrollera att material följer med tillbaka och rapportera skador eller saknade saker.\n\nDokumentera sådant som behöver följas upp med kunden eller som bör göras annorlunda nästa gång."
+        }
+      ]
+    },
+    {
+      "name": "Utlägg, resor & representation",
+      "sort_order": 40,
+      "articles": [
+        {
+          "title": "Utlägg & kvitton",
+          "sort_order": 10,
+          "published": true,
+          "body": "Utlägg för Hopefli ska ha koppling till arbetet och vara rimliga för uppdraget. Spara alltid kvitto.\n\nRegistrera utlägget enligt aktuell rutin med datum, belopp, syfte och vilket uppdrag eller projekt det tillhör. Är du osäker på ett större inköp – fråga innan du handlar."
+        },
+        {
+          "title": "Resor & bil",
+          "sort_order": 20,
+          "published": true,
+          "body": "Tjänsteresor planeras med hänsyn till tid, kostnad, säkerhet och uppdragets behov. Större kostnader bör förankras innan bokning.\n\nOm privat bil används i tjänsten dokumenteras körningen enligt Hopeflis aktuella rutin. Ersättning följer företagets policy och gällande regler."
+        },
+        {
+          "title": "Representation",
+          "sort_order": 30,
+          "published": true,
+          "body": "Representation ska ha ett tydligt affärsmässigt syfte och hanteras med gott omdöme.\n\nSpara kvitto och dokumentera vilka som deltog, organisation, datum och syfte. Är du osäker på om en kostnad är lämplig – stäm av innan."
+        }
+      ]
+    },
+    {
+      "name": "Utrustning & material",
+      "sort_order": 50,
+      "articles": [
+        {
+          "title": "Ansvar för utrustning",
+          "sort_order": 10,
+          "published": true,
+          "body": "Hopeflis utrustning ska hanteras varsamt och användas för rätt ändamål. När du lånar eller ansvarar för utrustning ser du till att den kommer tillbaka med tillbehör och i rimligt skick.\n\nFörvara utrustningen säkert och säg till om något behöver service, laddning eller komplettering."
+        },
+        {
+          "title": "Skada, fel eller förlust",
+          "sort_order": 20,
+          "published": true,
+          "body": "Om något går sönder, försvinner eller inte fungerar som det ska – rapportera det direkt. Försök inte dölja ett misstag.\n\nJu tidigare vi känner till problemet, desto större chans har vi att lösa det innan nästa uppdrag."
+        }
+      ]
+    },
+    {
+      "name": "IT & informationssäkerhet",
+      "sort_order": 60,
+      "articles": [
+        {
+          "title": "Konton, lösenord & MFA",
+          "sort_order": 10,
+          "published": true,
+          "body": "Dina Hopefli-konton är personliga. Dela aldrig lösenord, engångskoder eller MFA-koder.\n\nAnvänd unika lösenord och multifaktorautentisering där det finns. Om du misstänker att ett konto eller en enhet har komprometterats kontaktar du ansvarig direkt."
+        },
+        {
+          "title": "Misstänkta mejl & länkar",
+          "sort_order": 20,
+          "published": true,
+          "body": "Var extra försiktig med mejl eller meddelanden som skapar stress, kräver snabb betalning, ber om inloggningsuppgifter eller innehåller oväntade länkar och bilagor.\n\nVid osäkerhet: klicka inte. Kontrollera avsändaren via en annan kanal eller fråga ansvarig."
+        },
+        {
+          "title": "Kunddata & personuppgifter",
+          "sort_order": 30,
+          "published": true,
+          "body": "Kundinformation och personuppgifter används bara när det behövs för arbetet och lagras i de system Hopefli har valt.\n\nUndvik privata molntjänster, onödiga lokala kopior och att dela information bredare än nödvändigt. Priser, avtal, interna dokument och teknisk information kan också vara konfidentiella."
+        }
+      ]
+    },
+    {
+      "name": "Arbetsmiljö & kultur",
+      "sort_order": 70,
+      "articles": [
+        {
+          "title": "Trygg arbetsmiljö",
+          "sort_order": 10,
+          "published": true,
+          "body": "Alla ska kunna känna sig trygga och respekterade på Hopefli. Diskriminering, trakasserier, mobbning och kränkande beteende accepteras inte.\n\nSer eller upplever du något som inte känns rätt ska du kunna ta det med ansvarig eller annan person du har förtroende för."
+        },
+        {
+          "title": "Risker, tillbud & säkerhet",
+          "sort_order": 20,
+          "published": true,
+          "body": "Rapportera risker, tillbud, olyckor, farlig utrustning och situationer där arbetsbelastningen blir ohållbar. Ett tillbud är värt att rapportera även när ingen skadades.\n\nVid event ska säkerheten alltid gå före tidspress eller praktiska genvägar."
+        },
+        {
+          "title": "Alkohol & professionellt uppträdande",
+          "sort_order": 30,
+          "published": true,
+          "body": "Alkohol eller andra substanser får aldrig påverka säkerhet, omdöme eller arbetsförmåga. Vid kunduppdrag representerar vi Hopefli och agerar professionellt.\n\nOm alkohol förekommer vid representation eller en företagsaktivitet gäller måttfullhet och gott omdöme."
+        }
+      ]
+    },
+    {
+      "name": "Börja & sluta på Hopefli",
+      "sort_order": 80,
+      "articles": [
+        {
+          "title": "Din första tid",
+          "sort_order": 10,
+          "published": true,
+          "body": "Som ny på Hopefli ska du få en tydlig introduktion till personer, system, arbetssätt, säkerhet och den utrustning du behöver.\n\nFråga mycket. Det är bättre att fråga en gång extra än att behöva gissa hur något ska göras."
+        },
+        {
+          "title": "När anställningen avslutas",
+          "sort_order": 20,
+          "published": true,
+          "body": "När en anställning avslutas lämnas företagets utrustning, nycklar och annat material tillbaka. Konton och behörigheter stängs enligt Hopeflis rutin.\n\nFöretagsinformation ska inte sparas privat efter avslutad anställning, och sekretess som följer av avtal gäller även därefter."
+        }
+      ]
+    }
+  ]
+}
