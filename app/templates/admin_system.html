@@ -65,12 +65,26 @@
 </section>
 
 <section class="panel token-help">
-  <p class="eyebrow">CMS · PERSONALKATALOG</p>
+  <p class="eyebrow">CRM · CENTRAL INLOGGNING</p>
+  <h2>Hopefli SSO</h2>
+  <p class="muted">Ändra identitetsleverantörens adress efter domänbytet. Det befintliga klient-ID:t och den sparade hemligheten behålls. Serverns issuer verifieras innan ändringen sparas.</p>
+  <form method="post" action="{{ url_for('admin_sso_save') }}" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Issuer <input name="issuer" type="url" value="{{ sso_admin.issuer }}" required></label>
+    <label>Client ID <input value="{{ sso_admin.client_id }}" readonly></label>
+    <label>Redirect URI <input value="{{ sso_admin.redirect_uri }}" readonly></label>
+    <small class="muted">Använd <code>https://crm.hopefli.se</code>. Testa sedan en ny inloggning i privat fönster. Behåll gamla domänen aktiv till dess.</small>
+    <button class="primary" type="submit">Spara och verifiera SSO-adress <span>→</span></button>
+  </form>
+</section>
+
+<section class="panel token-help">
+  <p class="eyebrow">CRM · PERSONALKATALOG</p>
   <h2>Personal-API</h2>
-  <p class="muted">Hello hämtar personal server-side med den inloggade användarens OIDC access token. Standardvärdena följer CMS-kontraktet för intern personaldata och kan justeras här utan CLI.</p>
+  <p class="muted">Hello hämtar personal server-side med den inloggade användarens OIDC access token. Standardvärdena följer CRM-kontraktet för intern personaldata och kan justeras här utan CLI.</p>
   <form method="post" action="{{ url_for('admin_staff_save') }}" class="form staff-api-form">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label>CMS basadress <input name="base_url" value="{{ staff_api.base_url }}" required></label>
+    <label>CRM basadress <input name="base_url" value="{{ staff_api.base_url }}" required></label>
     <label>Personallista <input name="staff_path" value="{{ staff_api.staff_path }}" required></label>
     <label>Frånvarande idag <input name="away_path" value="{{ staff_api.away_path }}"></label>
     <label>Profilbild <input name="photo_path_template" value="{{ staff_api.photo_path_template }}" required></label>
@@ -81,7 +95,7 @@
   {% if staff_diag %}
   <div class="staff-diagnostics">
     <h3>Senaste personaldiagnostik</h3>
-    <p class="muted">CMS returnerade <strong>{{ staff_diag.received }}</strong> poster. <strong>{{ staff_diag.shown }}</strong> visas i Hello och <strong>{{ staff_diag.filtered }}</strong> filtreras bort.</p>
+    <p class="muted">CRM returnerade <strong>{{ staff_diag.received }}</strong> poster. <strong>{{ staff_diag.shown }}</strong> visas i Hello och <strong>{{ staff_diag.filtered }}</strong> filtreras bort.</p>
     <div class="diag-table-wrap"><table class="diag-table"><thead><tr><th>Person</th><th>E-post</th><th>Bild</th><th>Status</th><th>Orsak</th></tr></thead><tbody>
       {% for row in staff_diag.details %}<tr><td>{{ row.name }}</td><td>{{ row.email or '—' }}</td><td>{{ row.photo or '—' }}</td><td><strong>{{ row.status }}</strong></td><td>{{ row.reason }}</td></tr>{% endfor %}
     </tbody></table></div>
