@@ -161,7 +161,7 @@ def create_app():
         resp.headers.setdefault("X-Frame-Options", "DENY")
         resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-        resp.headers.setdefault("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://cms.hopefli.se")
+        resp.headers.setdefault("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://crm.hopefli.se")
         return resp
 
     def current_user():
@@ -185,7 +185,7 @@ def create_app():
         return wrapper
 
     def discovery(issuer_override=None):
-        issuer = (issuer_override or _sso_value("HOPEFLI_SSO_ISSUER", "https://cms.hopefli.se")).rstrip("/")
+        issuer = (issuer_override or _sso_value("HOPEFLI_SSO_ISSUER", "https://crm.hopefli.se")).rstrip("/")
         r = requests.get(f"{issuer}/.well-known/openid-configuration", timeout=8)
         r.raise_for_status()
         return r.json()
@@ -200,7 +200,7 @@ def create_app():
         if base in {"", "https://intra.hopefli.se"}:
             base = "https://hello.hopefli.se"
         return {
-            "issuer": "https://cms.hopefli.se",
+            "issuer": "https://crm.hopefli.se",
             "client_id": "hopefli-hello",
             "redirect_uri": f"{base}/auth/callback",
         }
@@ -210,7 +210,7 @@ def create_app():
 
     def _staff_config_defaults():
         return {
-            "base_url": os.environ.get("CMS_STAFF_BASE_URL", "https://cms.hopefli.se"),
+            "base_url": os.environ.get("CMS_STAFF_BASE_URL", "https://crm.hopefli.se"),
             "staff_path": os.environ.get("CMS_STAFF_API_PATH", "/api/internal/v1/staff"),
             "away_path": os.environ.get("CMS_STAFF_AWAY_API_PATH", "/api/internal/v1/staff/away-today"),
             "photo_path_template": os.environ.get("CMS_STAFF_PHOTO_PATH_TEMPLATE", "/api/internal/v1/staff/{id}/photo"),
@@ -265,7 +265,7 @@ def create_app():
 
     def _jobs_service():
         return JobsService(
-            os.environ.get("CMS_JOBS_BASE_URL", "https://cms.hopefli.se"),
+            os.environ.get("CMS_JOBS_BASE_URL", "https://crm.hopefli.se"),
             app.config["SESSION_REDIS"],
             pipeline_path=os.environ.get("CMS_JOBS_PIPELINE_PATH", "/api/internal/v1/jobs/pipeline"),
             cache_ttl=int(os.environ.get("CMS_JOBS_CACHE_SECONDS", "180")),
@@ -393,7 +393,7 @@ def create_app():
             secret = request.form.get("client_secret", "").strip()
             csrf = request.form.get("csrf", "")
             if not secret or len(secret) < 8:
-                flash("Ange CMS-klientens Client Secret.", "error")
+                flash("Ange CRM-klientens Client Secret.", "error")
                 return redirect(url_for("ssoconf"))
             if not session.get("ssoconf_csrf") or not secrets.compare_digest(csrf, session.get("ssoconf_csrf")):
                 abort(400)
@@ -403,7 +403,7 @@ def create_app():
                     raise ValueError("issuer mismatch")
             except Exception:
                 logger.exception("SSO bootstrap discovery failed")
-                flash("CMS SSO discovery kunde inte verifieras.", "error")
+                flash("CRM SSO discovery kunde inte verifieras.", "error")
                 return redirect(url_for("ssoconf"))
 
             state = secrets.token_urlsafe(32)
@@ -445,11 +445,11 @@ def create_app():
             return redirect(url_for("ssoconf"))
         if request.args.get("error"):
             logger.warning("SSO bootstrap provider error=%s", request.args.get("error"))
-            flash("CMS nekade eller avbröt inloggningen.", "error")
+            flash("CRM nekade eller avbröt inloggningen.", "error")
             return redirect(url_for("ssoconf"))
         code = request.args.get("code")
         if not code:
-            flash("CMS returnerade ingen authorization code.", "error")
+            flash("CRM returnerade ingen authorization code.", "error")
             return redirect(url_for("ssoconf"))
         try:
             meta = discovery(fixed["issuer"])
@@ -571,7 +571,7 @@ def create_app():
         except Exception as exc:
             logger.exception("SSO bootstrap failed type=%s", exc.__class__.__name__)
             session.pop("ssoconf_flow", None)
-            flash("Kopplingen kunde inte verifieras. Kontrollera Client Secret och CMS-klientens redirect URI.", "error")
+            flash("Kopplingen kunde inte verifieras. Kontrollera Client Secret och CRM-klientens redirect URI.", "error")
             return redirect(url_for("ssoconf"))
 
     @app.get("/ssoconf/callback")
@@ -816,7 +816,7 @@ def create_app():
             except StaffAuthExpired:
                 needs_reauth = True
             except StaffUnavailable:
-                error = "CMS personalkatalog kan inte nås just nu."
+                error = "CRM personalkatalog kan inte nås just nu."
             except Exception:
                 logger.exception("Staff directory failed")
                 error = "Personalkatalogen kunde inte läsas just nu."
@@ -1027,6 +1027,7 @@ def create_app():
                 "token_hint": ("••••" + cfg.get("token", "")[-4:]) if cfg.get("token") else "Ej sparad",
             },
             staff_api=_read_staff_config(),
+            sso_admin={"issuer": _sso_value("HOPEFLI_SSO_ISSUER", "https://crm.hopefli.se"), "client_id": _sso_value("HOPEFLI_SSO_CLIENT_ID", "hopefli-hello"), "redirect_uri": _sso_value("HOPEFLI_SSO_REDIRECT_URI", "https://hello.hopefli.se/auth/callback")},
             staff_diag=session.pop("staff_diag", None),
             worker=status, worker_log=worker_log, worker_log_name=log_name, worker_log_history=_worker_log_history(),
         )
@@ -1042,6 +1043,36 @@ def create_app():
             abort(404)
         return app.response_class(content, mimetype="text/plain; charset=utf-8")
 
+    @app.post("/admin/system/sso/save")
+    @admin_required
+    def admin_sso_save():
+        if not _admin_csrf_ok():
+            abort(400)
+        issuer = request.form.get("issuer", "").strip().rstrip("/")
+        if issuer not in {"https://crm.hopefli.se", "https://cms.hopefli.se"}:
+            flash("SSO-adressen måste vara https://crm.hopefli.se eller den tidigare cms.hopefli.se.", "error")
+            return redirect(url_for("admin_system"))
+        try:
+            meta = discovery(issuer)
+            if str(meta.get("issuer", "")).rstrip("/") != issuer:
+                raise ValueError("issuer mismatch")
+        except Exception:
+            logger.warning("Could not verify new SSO issuer")
+            flash("SSO-serverns issuer kunde inte verifieras. Ingen ändring sparades.", "error")
+            return redirect(url_for("admin_system"))
+        current = _read_sso_file()
+        current.update({
+            "issuer": issuer,
+            "client_id": _sso_value("HOPEFLI_SSO_CLIENT_ID", "hopefli-hello"),
+            "redirect_uri": _sso_value("HOPEFLI_SSO_REDIRECT_URI", "https://hello.hopefli.se/auth/callback"),
+        })
+        # Preserve the existing client secret, including an env-only configuration.
+        if not current.get("client_secret"):
+            current["client_secret"] = _sso_value("HOPEFLI_SSO_CLIENT_SECRET", "")
+        _write_sso_file(current)
+        flash("SSO-adressen uppdaterades. Testa ny inloggning i ett privat fönster innan den gamla domänen tas bort.", "success")
+        return redirect(url_for("admin_system"))
+
     @app.post("/admin/system/staff/save")
     @admin_required
     def admin_staff_save():
@@ -1053,10 +1084,10 @@ def create_app():
             "photo_path_template": request.form.get("photo_path_template", "").strip(),
         }
         if not cfg["base_url"].startswith("https://") or "{id}" not in cfg["photo_path_template"]:
-            flash("Kontrollera CMS-basadress och bildendpoint. Bildendpoint måste innehålla {id}.", "error")
+            flash("Kontrollera CRM-basadress och bildendpoint. Bildendpoint måste innehålla {id}.", "error")
             return redirect(url_for("admin_system"))
         _write_staff_config(cfg)
-        flash("CMS personalkatalog-konfigurationen sparades.", "success")
+        flash("CRM personalkatalog-konfigurationen sparades.", "success")
         return redirect(url_for("admin_system"))
 
     @app.post("/admin/system/staff/test")
@@ -1065,17 +1096,17 @@ def create_app():
         if not _admin_csrf_ok(): abort(400)
         token = _cms_access_token()
         if not token:
-            flash("Din nuvarande Hello-session saknar en giltig CMS access token. Logga in med Hopefli igen och testa på nytt.", "error")
+            flash("Din nuvarande Hello-session saknar en giltig CRM access token. Logga in med Hopefli igen och testa på nytt.", "error")
             return redirect(url_for("admin_system"))
         try:
             diag = _staff_service().diagnose_staff(token)
             session["staff_diag"] = diag
-            flash(f"CMS personalkatalog fungerar. {diag['received']} post(er) mottagna, {diag['shown']} visas och {diag['filtered']} filtreras bort.", "success")
+            flash(f"CRM personalkatalog fungerar. {diag['received']} post(er) mottagna, {diag['shown']} visas och {diag['filtered']} filtreras bort.", "success")
         except StaffAuthExpired:
-            flash("CMS nekade access token (401/403). Logga in på nytt och kontrollera API-behörigheten för hopefli-hello.", "error")
+            flash("CRM nekade access token (401/403). Logga in på nytt och kontrollera API-behörigheten för hopefli-hello.", "error")
         except Exception as exc:
             logger.warning("Staff API test failed type=%s", exc.__class__.__name__)
-            flash("CMS personalkatalog kunde inte nås med den konfigurerade endpointen.", "error")
+            flash("CRM personalkatalog kunde inte nås med den konfigurerade endpointen.", "error")
         return redirect(url_for("admin_system"))
 
     @app.post("/admin/system/app-log")
