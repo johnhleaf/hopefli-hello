@@ -263,9 +263,21 @@ def create_app():
                 person["photo_token"] = None
         return people
 
+    JOBS_CONFIG_PATH = SSO_CONFIG_PATH.parent / "jobs.json"
+
+    def _jobs_base_url():
+        try:
+            if JOBS_CONFIG_PATH.exists():
+                cfg = json.loads(JOBS_CONFIG_PATH.read_text())
+                if isinstance(cfg, dict) and cfg.get("base_url"):
+                    return cfg["base_url"]
+        except Exception:
+            logger.warning("Could not read jobs API configuration")
+        return os.environ.get("CMS_JOBS_BASE_URL", "https://crm.hopefli.se")
+
     def _jobs_service():
         return JobsService(
-            os.environ.get("CMS_JOBS_BASE_URL", "https://crm.hopefli.se"),
+            _jobs_base_url(),
             app.config["SESSION_REDIS"],
             pipeline_path=os.environ.get("CMS_JOBS_PIPELINE_PATH", "/api/internal/v1/jobs/pipeline"),
             cache_ttl=int(os.environ.get("CMS_JOBS_CACHE_SECONDS", "180")),
@@ -1070,6 +1082,18 @@ def create_app():
         if not current.get("client_secret"):
             current["client_secret"] = _sso_value("HOPEFLI_SSO_CLIENT_SECRET", "")
         _write_sso_file(current)
+        # Migrate existing CMS-backed data feeds at the same time as the issuer.
+        # Internal CMS_* variable names and stored IDs remain unchanged for compatibility.
+        if issuer == "https://crm.hopefli.se":
+            staff_cfg = _read_staff_config()
+            if staff_cfg.get("base_url", "").rstrip("/") == "https://cms.hopefli.se":
+                staff_cfg["base_url"] = issuer
+                _write_staff_config(staff_cfg)
+            JOBS_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            tmp = JOBS_CONFIG_PATH.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"base_url": issuer}, ensure_ascii=False) + "\n")
+            os.chmod(tmp, 0o600)
+            tmp.replace(JOBS_CONFIG_PATH)
         flash("SSO-adressen uppdaterades. Testa ny inloggning i ett privat fönster innan den gamla domänen tas bort.", "success")
         return redirect(url_for("admin_system"))
 
