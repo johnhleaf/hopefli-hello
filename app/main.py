@@ -344,7 +344,7 @@ def create_app():
         version = version_path.read_text().strip() if version_path.exists() else "dev"
         logo_exists = (BRANDING_DIR / "logo").exists()
         favicon_exists = (BRANDING_DIR / "favicon").exists()
-        return {"me": current_user(), "app_version": version, "logo_exists": logo_exists, "favicon_exists": favicon_exists}
+        return {"me": current_user(), "app_version": version, "logo_exists": logo_exists, "favicon_exists": favicon_exists, "crm_url": os.environ.get("CRM_URL", "https://crm.hopefli.se")}
 
     @app.get("/branding/<kind>")
     def branding_asset(kind):
