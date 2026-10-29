@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% block content %}
 <section class="hero"><div><p class="eyebrow">{{ now.strftime('%A %d %B') }}</p><h1>{{ greeting }}, {{ me.name.split(' ')[0] }}.</h1><p class="quote">“{{ quote }}”</p></div><div class="hero-orb">H</div></section>
 <section class="system-grid">
-  <a class="system-card crm" href="{{ config.get('CRM_URL','https://crm.hopefli.se') }}"><div><span>01</span><h2>CRM</h2><p>Kunder, offerter, ekonomi och försäljning.</p></div><b>Öppna →</b></a>
+  <a class="system-card crm" href="{{ crm_url }}"><div><span>01</span><h2>CRM</h2><p>Kunder, offerter, ekonomi och försäljning.</p></div><b>Öppna →</b></a>
   <a class="system-card event" href="https://spela.hopefli.se"><div><span>02</span><h2>Spela</h2><p>Quiz, musik och aktiviteter.</p></div><b>Öppna →</b></a>
   <a class="system-card docs" href="{{ config.get('BOOKSTACK_URL','https://bookstack.hopefli.se') }}"><div><span>03</span><h2>BookStack</h2><p>Rutiner, dokumentation och manualer.</p></div><b>Öppna →</b></a>
 </section>
