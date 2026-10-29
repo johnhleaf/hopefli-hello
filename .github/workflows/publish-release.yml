@@ -1,0 +1,52 @@
+name: Publish Hello installable tar.gz
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Validate Python and build image
+        run: |
+          python -m compileall -q app
+          docker build -t hopefli-hello:release .
+      - name: Build a release archive compatible with Hello updater
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '\r\n' < VERSION)"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          ROOT="hopefli-hello-v$VERSION"
+          mkdir -p "dist/stage/$ROOT"
+          tar --exclude='.git' --exclude='dist' --exclude='.github' --exclude='__pycache__' --exclude='*.pyc' -cf - . | tar -xf - -C "dist/stage/$ROOT"
+          test -f "dist/stage/$ROOT/VERSION"
+          test -f "dist/stage/$ROOT/docker-compose.yml"
+          test -f "dist/stage/$ROOT/update.sh"
+          tar -czf "dist/$ROOT.tar.gz" -C dist/stage "$ROOT"
+          sha256sum "dist/$ROOT.tar.gz" > "dist/$ROOT.tar.gz.sha256"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "asset=dist/$ROOT.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "checksum=dist/$ROOT.tar.gz.sha256" >> "$GITHUB_OUTPUT"
+      - name: Publish downloadable .tar.gz on GitHub Releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.package.outputs.version }}"
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+            exit 0
+          fi
+          gh release create "$TAG" "${{ steps.package.outputs.asset }}" "${{ steps.package.outputs.checksum }}" --target "$GITHUB_SHA" --title "Hopefli Hello $TAG" --notes "Installera via Hello → Admin → System → Ladda upp release. CRM-domän och SSO-migrering. Behåll befintlig session tills privat inloggning testats."
