@@ -4,11 +4,11 @@
 <section class="page-head staff-page-head">
   <p class="eyebrow">MÄNNISKORNA</p>
   <h1>Personal</h1>
-  <p>Kontaktuppgifter och vardagsinformation hämtas direkt från Hopefli CRM. Ändringar görs alltid där.</p>
+  <p>Kontaktuppgifter och vardagsinformation hämtas direkt från Hopefli CMS. Ändringar görs alltid där.</p>
 </section>
 
 {% if needs_reauth %}
-<section class="panel staff-notice"><div><strong>Förnya CRM-sessionen</strong><p>Din nuvarande Hello-session skapades utan en användbar CRM access token eller så har token gått ut.</p></div><a class="admin-link" href="{{ url_for('auth_login', next='/personal') }}">Logga in med Hopefli igen →</a></section>
+<section class="panel staff-notice"><div><strong>Förnya CMS-sessionen</strong><p>Din nuvarande Hello-session skapades utan en användbar CMS access token eller så har token gått ut.</p></div><a class="admin-link" href="{{ url_for('auth_login', next='/personal') }}">Logga in med Hopefli igen →</a></section>
 {% elif staff_error %}
 <section class="panel staff-notice warning"><div><strong>Personalkatalogen kan inte nås just nu</strong><p>{{ staff_error }}{% if staff_meta.stale %} Senast cachade uppgifter visas nedan.{% endif %}</p></div></section>
 {% endif %}
@@ -43,7 +43,7 @@
     </div>
   </article>
 {% else %}
-  {% if not needs_reauth %}<div class="panel staff-empty"><strong>Ingen personal att visa.</strong><p>{% if query %}Ingen matchade din sökning.{% else %}CRM returnerade inga personer markerade för Hopefli Hello.{% endif %}</p></div>{% endif %}
+  {% if not needs_reauth %}<div class="panel staff-empty"><strong>Ingen personal att visa.</strong><p>{% if query %}Ingen matchade din sökning.{% else %}CMS returnerade inga personer markerade för Hopefli Hello.{% endif %}</p></div>{% endif %}
 {% endfor %}
 </section>
 {% endblock %}

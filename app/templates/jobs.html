@@ -4,11 +4,11 @@
 <section class="page-head jobs-page-head">
   <p class="eyebrow">PÅ GÅNG</p>
   <h1>Uppdrag</h1>
-  <p>Bekräftade och pågående uppdrag hämtas direkt från Hopefli CRM. CRM är fortsatt master för all uppdragsdata.</p>
+  <p>Bekräftade och pågående uppdrag hämtas direkt från Hopefli CMS. CMS är fortsatt master för all uppdragsdata.</p>
 </section>
 
 {% if needs_reauth %}
-<section class="panel staff-notice"><div><strong>Förnya CRM-sessionen</strong><p>Din Hello-session saknar en giltig CRM access token.</p></div><a class="admin-link" href="{{ url_for('auth_login', next='/uppdrag') }}">Logga in med Hopefli igen →</a></section>
+<section class="panel staff-notice"><div><strong>Förnya CMS-sessionen</strong><p>Din Hello-session saknar en giltig CMS access token.</p></div><a class="admin-link" href="{{ url_for('auth_login', next='/uppdrag') }}">Logga in med Hopefli igen →</a></section>
 {% elif jobs_error %}
 <section class="panel staff-notice warning"><div><strong>Uppdragen kan inte nås just nu</strong><p>{{ jobs_error }}{% if jobs_meta.stale %} Senast cachade uppgifter visas nedan.{% endif %}</p></div></section>
 {% endif %}
@@ -31,8 +31,8 @@
     </div>
   </article>
 {% else %}
-  {% if not needs_reauth %}<div class="panel jobs-empty"><strong>Inga bekräftade eller pågående uppdrag just nu.</strong><p>När ett uppdrag hamnar i CRM-pipen visas det automatiskt här.</p></div>{% endif %}
+  {% if not needs_reauth %}<div class="panel jobs-empty"><strong>Inga bekräftade eller pågående uppdrag just nu.</strong><p>När ett uppdrag hamnar i CMS-pipen visas det automatiskt här.</p></div>{% endif %}
 {% endfor %}
 </section>
-{% if jobs_meta.stale %}<p class="muted jobs-cache-note">Visar senast cachade CRM-data.</p>{% endif %}
+{% if jobs_meta.stale %}<p class="muted jobs-cache-note">Visar senast cachade CMS-data.</p>{% endif %}
 {% endblock %}
