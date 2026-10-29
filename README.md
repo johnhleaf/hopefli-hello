@@ -1,3 +1,16 @@
+## 0.1.17 – Säker CRM-flytt och GitHub-synk
+
+- Återställer CRM-SSO-migrationen efter att lokal GitHub-synk skrev tillbaka en äldre version.
+- Lokal GitHub-synk förhindras från att skriva över en lika ny eller nyare kodversion på GitHub.
+- För att få nya funktioner måste ny release installeras under Admin → System; Synka aktuell version laddar upp lokal kod till GitHub och uppdaterar inte Hello.
+
+## 0.1.16 – CRM-domän för Hello SSO
+
+- **Admin → System → Hopefli SSO**: ändra issuer till `https://crm.hopefli.se` utan att skriva in klienthemligheten igen. Issuer verifieras mot OIDC-discovery innan lagring. Befintligt klient-ID och redirect URI behålls.
+- När CRM-issuer sparas flyttas även sparad personal-API-basadress och uppdrags-API till CRM. Interna `CMS_*`-miljövariabler/nycklar behålls för bakåtkompatibilitet.
+- Hellos synliga texter och systemlänken ändras från CMS till CRM. Den tidigare SSO-inställningen förblir aktiv fram till admin själv sparar den nya.
+- Testa ny SSO-inloggning i ett privat fönster innan `cms.hopefli.se` avvecklas.
+
 # Hopefli Hello v0.1.15
 
 - BookStack standardlänk ändrad till https://bookstack.hopefli.se

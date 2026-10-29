@@ -133,6 +133,26 @@ ASK
   else
     git -C "$tmp/repo" checkout -B "$branch" >>"$log_path" 2>&1
   fi
+  # GitHub is a source repository, not the installation update channel.
+  # Never overwrite a newer/same-version remote tree with an older local release.
+  local local_ver remote_ver
+  local_ver=$(cat "$APP_DIR/current/VERSION" 2>/dev/null || echo unknown)
+  remote_ver=$(git -C "$tmp/repo" show "HEAD:VERSION" 2>/dev/null | tr -d '\r\n' || echo "")
+  if [[ -n "$remote_ver" ]]; then
+    if ! python3 - "$local_ver" "$remote_ver" <<'PYVERSION'
+import re, sys
+local, remote = sys.argv[1:]
+if not re.fullmatch(r"\d+\.\d+\.\d+", local) or not re.fullmatch(r"\d+\.\d+\.\d+", remote):
+    sys.exit(1)
+sys.exit(0 if tuple(map(int, local.split("."))) > tuple(map(int, remote.split("."))) else 1)
+PYVERSION
+    then
+      echo "Refusing sync: installed version $local_ver is not newer than GitHub version $remote_ver." >>"$log_path"
+      cp "$log_path" "$INBOX/last-github.log" || true
+      write_status error github "GitHub-synk stoppad: installerad version ($local_ver) är inte nyare än GitHub ($remote_ver). Installera ny release via Ladda upp release istället." "{\"job_id\":\"$job_id\",\"log_file\":\"$log_file\"}"
+      return 1
+    fi
+  fi
   git -C "$tmp/repo" rm -r --ignore-unmatch . >>"$log_path" 2>&1 || true
   cp -a "$APP_DIR/current/." "$tmp/repo/"
   find "$tmp/repo" -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true

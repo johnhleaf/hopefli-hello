@@ -3,7 +3,7 @@
   <div class="setup-copy">
     <p class="eyebrow">HELLO · FÖRSTA KONFIGURATION</p>
     <h1>Anslut Hopefli SSO.</h1>
-    <p>Den här sidan finns bara tills kopplingen är verifierad. Client Secret sparas först efter en lyckad CMS-inloggning med ett konto som har Admin-åtkomst till Hopefli Hello.</p>
+    <p>Den här sidan finns bara tills kopplingen är verifierad. Client Secret sparas först efter en lyckad CRM-inloggning med ett konto som har Admin-åtkomst till Hopefli Hello.</p>
   </div>
   <div class="setup-card">
     <span class="mini-logo">H</span>
@@ -15,20 +15,20 @@
       <div><small>Version</small><strong>{{ app_version }}</strong></div>
     </div>
     <div class="setup-note">
-      <strong>Redirect URI i CMS</strong>
+      <strong>Redirect URI i CRM</strong>
       <p>Klienten ska endast ha <code>{{ fixed.redirect_uri }}</code> registrerad. Setup och vanlig inloggning använder samma callback.</p>
     </div>
 
     <div class="setup-note">
-      <strong>Värden i Hopefli CMS</strong>
+      <strong>Värden i Hopefli CRM</strong>
       <p>Namn: <code>Hopefli Hello</code><br>Client ID: <code>hopefli-hello</code><br>System: <code>Hello</code><br>Redirect URI: <code>{{ fixed.redirect_uri }}</code></p>
     </div>
     <form method="post" class="form">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <label>Client Secret
-        <input name="client_secret" type="password" autocomplete="new-password" required placeholder="Klistra in secret från Hopefli CMS">
+        <input name="client_secret" type="password" autocomplete="new-password" required placeholder="Klistra in secret från Hopefli CRM">
       </label>
-      <button class="primary" type="submit">Verifiera via Hopefli CMS <span>→</span></button>
+      <button class="primary" type="submit">Verifiera via Hopefli CRM <span>→</span></button>
     </form>
     <small class="muted">Secret visas aldrig igen och skrivs inte till browserloggar.</small>
   </div>
